@@ -46,12 +46,15 @@ public:
     // Carga un mapa de Tiled con VARIOS tilesets embebidos y VARIAS tilelayers (a
     // diferencia de loadFromTiledJson, que asume uno solo de cada uno). Dibuja TODAS
     // las tilelayers del archivo (Solid antes que decor antes que Hazards, sin
-    // importar el orden del archivo) y genera colisionadores solidos SOLO para la
-    // capa llamada "Solid": cualquier gid distinto de 0 ahi es solido (no hace falta
-    // marcar tiles individuales con properties). Si hay una imagelayer, se dibuja
-    // de fondo respetando repeatx. La capa de objetos (objectgroup) se ignora aca;
-    // se lee aparte. Tolera tilesets cuya imagen no exista todavia en disco: esos
-    // gids simplemente no se dibujan (no rompe la carga del resto del mapa).
+    // importar el orden del archivo). Genera colisionadores para dos capas por
+    // nombre (cualquier gid distinto de 0 ahi cuenta, sin properties por tile):
+    //  - "Solid": BLOQUEANTE (GameObject "TilemapCollider").
+    //  - "Hazards": TRIGGER, no bloquea el paso (GameObject "Hazard"); el dano real
+    //    lo aplica el juego reaccionando a ese nombre (ver GatoController::onCollision).
+    // Si hay una imagelayer, se dibuja de fondo respetando repeatx. La capa de
+    // objetos (objectgroup) se lee aparte (ver getObjects). Tolera tilesets cuya
+    // imagen no exista todavia en disco: esos gids simplemente no se dibujan (no
+    // rompe la carga del resto del mapa).
     bool loadTiledMap(const std::string& path);
 
     // Un objeto de una capa objectgroup (p.ej. "Objects") leida por loadTiledMap:
@@ -98,7 +101,10 @@ private:
 
     // --- Modo multi-tileset / multi-capa (ver loadTiledMap) ---
     struct SubTileset { SDL_Texture* texture = nullptr; int firstgid = 1; int columns = 1; };
-    struct TiledLayer { std::vector<int> gids; bool solid = false; }; // gids: convencion Tiled (0 = vacio)
+    // gids: convencion Tiled (0 = vacio). solid genera colision bloqueante (capa
+    // "Solid"); hazard genera colision TRIGGER, sin bloquear el paso (capa "Hazards");
+    // el dano real lo aplica el juego via GatoController::onCollision (name=="Hazard").
+    struct TiledLayer { std::vector<int> gids; bool solid = false; bool hazard = false; };
 
     bool multiMode = false;
     std::vector<SubTileset> multiTilesets;  // ordenados por firstgid ascendente

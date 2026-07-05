@@ -183,12 +183,12 @@ public:
 class GatoController : public Component {
 public:
     // Movimiento horizontal (px/seg y px/seg^2)
-    float maxSpeed = 300.0f;
-    float accel    = 2800.0f;   // que tan rapido alcanza maxSpeed
-    float friction = 3400.0f;   // que tan rapido frena al soltar
+    float maxSpeed = 150.0f;
+    float accel    = 1400.0f;   // que tan rapido alcanza maxSpeed
+    float friction = 1700.0f;   // que tan rapido frena al soltar
 
     // Salto
-    float jumpSpeed = 620.0f;
+    float jumpSpeed = 310.0f;
     float jumpCut   = 0.45f;    // multiplicador al soltar Espacio subiendo
 
     // Dash de Lucidez
@@ -206,15 +206,49 @@ public:
 
     bool controlsLocked = false;
 
-    // Hook para que pinchos/enemigos disparen la animacion de dano. Por ahora
-    // solo afecta al sprite (no hay vidas ni knockback todavia).
+    // Vidas: las consume takeDamage() (Hazards y enemigos). Al llegar a 0 se
+    // reinicia el contador y se vuelve al spawn (mismo respawn() que usa la
+    // caida al vacio); no hay pantalla de "game over" todavia, solo el log.
+    static constexpr int maxLives = 3;
+    int lives = maxLives;
+
+    // Hook para que pinchos/enemigos disparen la animacion de dano SIN tocar
+    // vidas (lo usa takeDamage() de abajo; queda publico por si alguna
+    // animacion quiere dispararse sola sin restar vida).
     void hurt() { hurtTimer = hurtDuration; }
+
+    // Punto unico de dano real: resta una vida y dispara la animacion, con un
+    // cooldown corto para no perder varias vidas de un tiron mientras el
+    // collider del peligro/enemigo sigue solapado unos frames.
+    void takeDamage() {
+        if (controlsLocked || damageCooldown > 0.0f) return;
+        hurt();
+        damageCooldown = damageCooldownTime;
+        if (--lives <= 0) {
+            lives = maxLives;
+            gameOverPending = true; // el reset de posicion se hace en el proximo update() (ahi hay RigidBody2D a mano)
+            SDL_Log("GAME OVER: te quedaste sin vidas, reiniciando desde el spawn.");
+        }
+    }
+
+    // Reacciona a los tiles de la capa Hazards (ver TilemapRenderer::buildCollidersMulti,
+    // que los crea con name="Hazard"). Los enemigos NO pasan por aca: ellos llaman a
+    // takeDamage() directo desde su propio onCollision (ver clase Enemy).
+    void onCollision(GameObject* other) override {
+        if (other->name == "Hazard") takeDamage();
+    }
 
     void update(float dt) override {
         auto rb     = gameObject->getComponent<RigidBody2D>();
         auto sprite = gameObject->getComponent<SpriteRenderer>();
         auto anim   = gameObject->getComponent<SpriteAnimator>();
         if (!rb) return;
+
+        if (damageCooldown > 0.0f) damageCooldown -= dt;
+        if (gameOverPending) {
+            respawn(rb, gameObject->transform);
+            gameOverPending = false;
+        }
 
         if (controlsLocked) {
             rb->velocityX = 0.0f;
@@ -368,7 +402,13 @@ private:
         canWaterJump = true;
         hurtTimer = landTimer = jumpStartTimer = waterShootTimer = 0.0f;
         wasOnGround = false;
+        damageCooldown = 0.0f;
     }
+
+    // dano/vidas
+    float damageCooldown = 0.0f;
+    bool  gameOverPending = false;
+    static constexpr float damageCooldownTime = 1.0f; // segundos de invulnerabilidad tras un golpe
 
     // estado del dash
     bool  dashing = false;
@@ -593,7 +633,10 @@ public:
 
     void onCollision(GameObject* other) override {
         if (other->name != "Player" || cooldown > 0.0f) return;
-        if (auto* ctrl = other->getComponent<GatoController>()) ctrl->hurt();
+        // takeDamage() (no hurt() directo): asi el contacto con un enemigo
+        // tambien resta una vida, igual que un Hazard, y respeta el mismo
+        // cooldown de invulnerabilidad del lado del jugador.
+        if (auto* ctrl = other->getComponent<GatoController>()) ctrl->takeDamage();
         cooldown = hurtCooldown;
     }
 
@@ -605,15 +648,18 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Hud: contador visual de fragmentos (la guia pide "UI: contador de
-// fragmentos" en el orden de dibujo). Dibuja en coordenadas de PANTALLA fijas
-// arriba a la izquierda (no usa Camera ni Transform: por eso no sigue el
-// mundo), 3 filas de 3 cuadrados, una fila por grupo de memoria. Relleno =
-// recogido, solo el borde = todavia no. Sin texto (el motor no tiene
-// TextRenderer todavia, ver README.md "Pendiente").
+// Hud: contador visual de fragmentos y vidas (la guia pide "UI: contador de
+// fragmentos, vidas, etc." en el orden de dibujo). Dibuja en coordenadas de
+// PANTALLA fijas arriba a la izquierda (no usa Camera ni Transform: por eso
+// no sigue el mundo). Fragmentos: 3 filas de 3 cuadrados, una fila por grupo
+// de memoria. Vidas: una fila roja debajo, del tamano de GatoController::maxLives.
+// Relleno = recogido/vida disponible; solo el borde = todavia no / perdida.
+// Sin texto (el motor no tiene TextRenderer todavia, ver README.md "Pendiente").
 // ---------------------------------------------------------------------------
 class Hud : public Component {
 public:
+    GatoController* player = nullptr; // para leer 'lives'; lo asigna buildFragmentoMemoria
+
     void render() override {
         SDL_Renderer* renderer = gameObject->scene->getRenderer();
         const float size = 14.0f, gap = 4.0f, marginX = 12.0f, marginY = 12.0f;
@@ -628,6 +674,15 @@ public:
                 if (i < g_memoria.grupo[g]) SDL_RenderFillRect(renderer, &r);
                 else                        SDL_RenderRect(renderer, &r);
             }
+        }
+
+        if (!player) return;
+        float livesY = marginY + 3 * (size + gap) + 8.0f; // debajo de las 3 filas de fragmentos
+        SDL_SetRenderDrawColor(renderer, 220, 40, 40, 255);
+        for (int i = 0; i < GatoController::maxLives; ++i) {
+            SDL_FRect r{ marginX + i * (size + gap), livesY, size, size };
+            if (i < player->lives) SDL_RenderFillRect(renderer, &r);
+            else                   SDL_RenderRect(renderer, &r);
         }
     }
 };
@@ -847,9 +902,9 @@ void buildFragmentoMemoria(Scene& scene) {
     anim->play("idle");
     player->addComponent<RigidBody2D>();
     auto col = player->addComponent<BoxCollider>();
-    // Mismas proporciones que antes (cuerpo real del sprite, sin el padding
-    // transparente de los pies), pero a la mitad: la escala bajo de 2x a 1x.
-    // ponytail: valores a ojo desde el calculo anterior; retocar viendo F1.
+    // Cuerpo real del sprite (sin el padding transparente de los pies), retocado
+    // a ojo viendo F1 sobre el nivel real (los valores originales, calculados a
+    // partir de la escala 2x vieja, quedaban un poco grandes a escala 1x).
     col->width = 32.0f; col->height = 32.0f; col->offsetY = 3.0f;
     auto ctrl = player->addComponent<GatoController>();
     ctrl->hasWaterGun = true; // SOLO nivel 3; activado aca para poder probarla ya
@@ -879,6 +934,7 @@ void buildFragmentoMemoria(Scene& scene) {
     f->setTarget(player);
     f->deadZoneWidth = 120.0f; f->deadZoneHeight = 120.0f;
 
-    // --- HUD: contador de fragmentos, ultimo para quedar dibujado encima de todo ---
-    scene.createGameObject("Hud")->addComponent<Hud>();
+    // --- HUD: contador de fragmentos y vidas, ultimo para quedar dibujado encima de todo ---
+    auto hud = scene.createGameObject("Hud")->addComponent<Hud>();
+    hud->player = ctrl;
 }

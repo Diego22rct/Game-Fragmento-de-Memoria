@@ -543,6 +543,7 @@ bool TilemapRenderer::loadTiledMap(const std::string& filePath) {
 
         TiledLayer layer;
         layer.solid = (name == "Solid");
+        layer.hazard = (name == "Hazards");
         layer.gids.reserve(l["data"].size());
         for (const auto& v : l["data"])
             layer.gids.push_back((int)(v.get<unsigned>() & FLIP_MASK));
@@ -589,17 +590,21 @@ void TilemapRenderer::buildCollidersMulti() {
     float worldTileH = tileH * t->scaleY;
 
     for (const TiledLayer& layer : multiLayers) {
-        if (!layer.solid) continue;
+        if (!layer.solid && !layer.hazard) continue;
         for (int row = 0; row < mapHeight; ++row) {
             for (int col = 0; col < mapWidth; ++col) {
                 if (layer.gids[row * mapWidth + col] == 0) continue; // vacio: sin colision
 
-                GameObject* tileObj = gameObject->scene->createGameObject("TilemapCollider");
+                // Los Hazards se nombran "Hazard" (distinto de "TilemapCollider") para que
+                // GatoController::onCollision los reconozca por nombre y aplique dano; son
+                // TRIGGER porque solo deben avisar el contacto, no bloquear el paso como el piso.
+                GameObject* tileObj = gameObject->scene->createGameObject(layer.hazard ? "Hazard" : "TilemapCollider");
                 tileObj->transform->x = t->x + col * worldTileW + worldTileW * 0.5f;
                 tileObj->transform->y = t->y + row * worldTileH + worldTileH * 0.5f;
                 auto bc = tileObj->addComponent<BoxCollider>();
                 bc->width = worldTileW;
                 bc->height = worldTileH;
+                bc->isTrigger = layer.hazard;
             }
         }
     }
