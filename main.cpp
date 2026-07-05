@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 
         scene->update(dt);
 
-        SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         scene->render();
         Debug::drawColliders(*scene);

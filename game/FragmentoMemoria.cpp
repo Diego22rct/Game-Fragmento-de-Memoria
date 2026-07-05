@@ -204,6 +204,10 @@ public:
     float spawnX = 0.0f, spawnY = -150.0f;
     float killY  = 900.0f;      // debajo de esta Y se considera caida al vacio
 
+    // Hook para que pinchos/enemigos disparen la animacion de dano. Por ahora
+    // solo afecta al sprite (no hay vidas ni knockback todavia).
+    void hurt() { hurtTimer = hurtDuration; }
+
     void update(float dt) override {
         const bool* keys = SDL_GetKeyboardState(nullptr);
         auto rb     = gameObject->getComponent<RigidBody2D>();
@@ -292,6 +296,7 @@ public:
             jumpBuffer = 0.0f;
             coyote = 0.0f; // consumir la ventana: evita doble salto en el mismo apoyo
             jumping = true;
+            jumpStartTimer = jumpStartDuration; // reproducir el impulso/despegue
         }
         // Salto variable: soltar Espacio mientras sube corta el impulso. Solo
         // aplica a saltos propios (no al final de un dash ni al salto de agua).
@@ -306,15 +311,38 @@ public:
             rb->velocityY = -waterJump;
             canWaterJump = false;
             jumping = false;
+            waterShootTimer = waterShootDuration; // animacion de la pistola de agua
             // TODO: spawnear el chorro de agua (sprite + Lifetime) y sonido.
         }
 
-        // --- sprite y animacion (misma logica que el ejemplo del curso) ---
+        // --- sprite y animacion ---
         if (sprite && moveX != 0.0f) sprite->flipX = moveX < 0.0f;
+
+        bool onGround = coyote > 0.0f; // grounded suavizado (anti-parpadeo)
+        // "Aterrizo" recien ahora (transicion real: coyote ya filtra el parpadeo
+        // sub-pixel del grounded crudo, asi que este flanco no es espurio).
+        if (onGround && !wasOnGround) landTimer = landDuration;
+        wasOnGround = onGround;
+
+        if (hurtTimer > 0.0f) hurtTimer -= dt;
+        if (landTimer > 0.0f) landTimer -= dt;
+        if (jumpStartTimer > 0.0f) jumpStartTimer -= dt;
+        if (waterShootTimer > 0.0f) waterShootTimer -= dt;
+
         if (anim) {
-            bool onGround = coyote > 0.0f; // grounded suavizado (anti-parpadeo)
-            if (onGround) anim->play(moveX != 0.0f ? "run" : "idle");
-            else          anim->play(rb->velocityY < 0.0f ? "jump" : "fall");
+            if (hurtTimer > 0.0f) {
+                anim->play("hurt");
+            } else if (onGround) {
+                if (landTimer > 0.0f) anim->play("land");
+                else anim->play(moveX != 0.0f ? "run" : "idle");
+            } else {
+                // En el aire: agua > despegue > subida/apice/caida (por velocidad).
+                if (waterShootTimer > 0.0f) anim->play("water_shoot");
+                else if (jumpStartTimer > 0.0f) anim->play("jump_start");
+                else if (rb->velocityY < -apexThreshold) anim->play("jump_up");
+                else if (rb->velocityY >  apexThreshold) anim->play("fall");
+                else anim->play("jump_apex"); // velocidad vertical casi nula: el pico del salto
+            }
         }
 
         jumpPrev = jumpNow; dashPrev = dashNow; waterPrev = waterNow;
@@ -328,6 +356,8 @@ private:
         dashing = false;
         canDash = true;
         canWaterJump = true;
+        hurtTimer = landTimer = jumpStartTimer = waterShootTimer = 0.0f;
+        wasOnGround = false;
     }
 
     // estado del dash
@@ -349,6 +379,18 @@ private:
     float jumpBuffer = 0.0f;
     static constexpr float coyoteTime     = 0.1f;
     static constexpr float jumpBufferTime = 0.12f;
+
+    // maquina de animacion: timers de los clips "de un solo tiro" (no loop).
+    // Cada duracion = frames del sheet / fps con que se registra ese clip
+    // (ver addStripAnimation en buildFragmentoMemoria), para que el timer se
+    // agote justo cuando el sheet termina de reproducirse.
+    bool  wasOnGround = false;  // para detectar el flanco real de aterrizaje
+    float hurtTimer = 0.0f, landTimer = 0.0f, jumpStartTimer = 0.0f, waterShootTimer = 0.0f;
+    static constexpr float hurtDuration       = 3.0f / 10.0f; // hurt_sheet_3x1 a 10 fps
+    static constexpr float landDuration       = 2.0f / 14.0f; // land_sheet_2x1 a 14 fps
+    static constexpr float jumpStartDuration  = 3.0f / 18.0f; // jump_start_sheet_3x1 a 18 fps
+    static constexpr float waterShootDuration = 4.0f / 20.0f; // water_shoot_sheet_4x1 a 20 fps
+    static constexpr float apexThreshold      = 60.0f;        // px/seg: "casi cero" = pico del salto
 };
 
 // ---------------------------------------------------------------------------
@@ -396,22 +438,36 @@ static GameObject* crearFragmento(Scene& scene, float x, float y) {
 }
 
 void buildFragmentoMemoria(Scene& scene) {
-    // --- el gato (placeholder: Ninja Frog de Pixel Adventure hasta tener sprites propios) ---
+    // --- el gato: sprites propios (assets/animation_cat), frames de 64x64, mira
+    //     a la derecha por defecto (flipX lo maneja el GatoController). Escala
+    //     2x (64*2=128) para quedar del mismo tamano en pantalla que antes con
+    //     el placeholder (32*4=128), asi el collider de abajo no cambia. ---
     GameObject* player = scene.createGameObject("Player");
     player->transform->y = -150.0f;
-    player->transform->scaleX = player->transform->scaleY = 4.0f;
+    player->transform->scaleX = player->transform->scaleY = 2.0f;
     player->addComponent<SpriteRenderer>();
-    auto anim = player->addComponent<SpriteAnimator>(32, 32, 1);
-    const std::string gato = "assets/pixel_adventure/Main Characters/Ninja Frog/";
-    anim->addStripAnimation("idle", gato + "Idle (32x32).png", 32, 32, 20.0f);
-    anim->addStripAnimation("run",  gato + "Run (32x32).png",  32, 32, 20.0f);
-    anim->addStripAnimation("jump", gato + "Jump (32x32).png", 32, 32, 20.0f);
-    anim->addStripAnimation("fall", gato + "Fall (32x32).png", 32, 32, 20.0f);
-    anim->addStripAnimation("dash", gato + "Double Jump (32x32).png", 32, 32, 30.0f);
+    auto anim = player->addComponent<SpriteAnimator>(64, 64, 1);
+    const std::string gato = "assets/animation_cat/";
+    anim->addStripAnimation("idle",        gato + "idle_sheet_6x1.png",        64, 64, 10.0f);
+    anim->addStripAnimation("run",         gato + "run_sheet_8x1.png",         64, 64, 14.0f);
+    anim->addStripAnimation("jump_start",  gato + "jump_start_sheet_3x1.png",  64, 64, 18.0f, false);
+    anim->addStripAnimation("jump_up",     gato + "jump_up_sheet_2x1.png",     64, 64, 10.0f);
+    anim->addStripAnimation("jump_apex",   gato + "jump_apex_sheet_1x1.png",   64, 64, 1.0f);
+    anim->addStripAnimation("fall",        gato + "fall_sheet_2x1.png",        64, 64, 10.0f);
+    anim->addStripAnimation("land",        gato + "land_sheet_2x1.png",        64, 64, 14.0f, false);
+    anim->addStripAnimation("dash",        gato + "dash_sheet_4x1.png",        64, 64, 26.0f, false);
+    anim->addStripAnimation("hurt",        gato + "hurt_sheet_3x1.png",        64, 64, 10.0f, false);
+    anim->addStripAnimation("water_shoot", gato + "water_shoot_sheet_4x1.png", 64, 64, 20.0f, false);
     anim->play("idle");
     player->addComponent<RigidBody2D>();
     auto col = player->addComponent<BoxCollider>();
-    col->width = 64.0f; col->height = 110.0f; col->offsetY = 8.0f;
+    // Medido sobre el canal alfa real de idle/run/land (frame de 64x64, sin
+    // recortar): el cuerpo visible va de x=[10,56) y=[14,56) aprox, con
+    // padding transparente debajo de los pies (a diferencia del placeholder
+    // anterior, que llegaba casi al borde del frame). offsetY empuja el
+    // collider hacia abajo para que el piso quede a la altura de los pies
+    // visibles y no "flote". Si se reemplaza el sprite, medir de nuevo.
+    col->width = 88.0f; col->height = 84.0f; col->offsetY = 6.0f;
     auto ctrl = player->addComponent<GatoController>();
     ctrl->hasWaterGun = true; // SOLO nivel 3; activado aca para poder probarla ya
 
