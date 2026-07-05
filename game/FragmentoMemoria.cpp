@@ -204,17 +204,27 @@ public:
     float spawnX = 0.0f, spawnY = -150.0f;
     float killY  = 900.0f;      // debajo de esta Y se considera caida al vacio
 
+    bool controlsLocked = false;
+
     // Hook para que pinchos/enemigos disparen la animacion de dano. Por ahora
     // solo afecta al sprite (no hay vidas ni knockback todavia).
     void hurt() { hurtTimer = hurtDuration; }
 
     void update(float dt) override {
-        const bool* keys = SDL_GetKeyboardState(nullptr);
         auto rb     = gameObject->getComponent<RigidBody2D>();
         auto sprite = gameObject->getComponent<SpriteRenderer>();
         auto anim   = gameObject->getComponent<SpriteAnimator>();
         if (!rb) return;
 
+        if (controlsLocked) {
+            rb->velocityX = 0.0f;
+            rb->velocityY = 0.0f;
+            rb->gravityScale = 0.0f;
+            if (anim) anim->play("idle");
+            return;
+        }
+
+        const bool* keys = SDL_GetKeyboardState(nullptr);
         Transform* t = gameObject->transform;
 
         // --- lectura de teclas (los flancos se detectan contra el frame anterior) ---
@@ -430,21 +440,94 @@ public:
 };
 
 // ---------------------------------------------------------------------------
+// CinematicaFinal: componente que se encarga de mostrar la secuencia de 5
+// imagenes de final en pantalla completa, avanzando con ESPACIO o ENTER.
+// Al terminar, cierra el juego limpiamente enviando un evento de QUIT.
+// ---------------------------------------------------------------------------
+class CinematicaFinal : public Component {
+public:
+    GameObject* playerObject = nullptr;
+
+    void awake() override {
+        AssetManager& assets = gameObject->scene->getAssets();
+        for (int i = 1; i <= 5; ++i) {
+            std::string path = "assets/cinematica_final/final_" + std::to_string(i) + ".png";
+            SDL_Texture* tex = assets.loadTexture(path);
+            if (tex) {
+                textures.push_back(tex);
+            } else {
+                SDL_Log("CinematicaFinal: Error al cargar %s", path.c_str());
+            }
+        }
+    }
+
+    void update(float dt) override {
+        if (textures.empty()) {
+            finalizar();
+            return;
+        }
+
+        const bool* keys = SDL_GetKeyboardState(nullptr);
+        bool pressed = keys[SDL_SCANCODE_SPACE] || keys[SDL_SCANCODE_RETURN];
+
+        // Flanco de subida
+        if (pressed && !prevPressed) {
+            indexActual++;
+            if (indexActual >= (int)textures.size()) {
+                finalizar();
+                return;
+            }
+        }
+        prevPressed = pressed;
+    }
+
+    void render() override {
+        if (textures.empty() || indexActual < 0 || indexActual >= (int)textures.size()) return;
+
+        SDL_Renderer* renderer = gameObject->scene->getRenderer();
+        SDL_Texture* tex = textures[indexActual];
+
+        // Coordenadas fijas en pantalla (1280x720) ignorando camara de juego
+        SDL_FRect dst{ 0.0f, 0.0f, 1280.0f, 720.0f };
+        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+    }
+
+private:
+    std::vector<SDL_Texture*> textures;
+    int indexActual = 0;
+    bool prevPressed = true; // Empezar en true evita que el salto al entrar active el avance
+
+    void finalizar() {
+        SDL_Event event = {};
+        event.type = SDL_EVENT_QUIT;
+        SDL_PushEvent(&event);
+    }
+};
+
+// ---------------------------------------------------------------------------
 // ExitZone: zona de salida del nivel (objeto "exit" de Objects). Al tocarla se
-// evalua el final segun la guia: bueno si los 3 grupos estan completos (3/3
-// cada uno), malo si no. 'reached' evita loggear el resultado en cada frame
-// mientras el jugador se queda parado adentro del trigger.
+// detiene el juego y se activa la cinematica final interactiva.
 // ---------------------------------------------------------------------------
 class ExitZone : public Component {
 public:
     void onCollision(GameObject* other) override {
         if (other->name != "Player" || reached) return;
         reached = true;
+
         bool good = g_memoria.grupo[0] == 3 && g_memoria.grupo[1] == 3 && g_memoria.grupo[2] == 3;
-        if (good) SDL_Log("FINAL BUENO: recuperaste los 9 recuerdos.");
-        else      SDL_Log("FINAL MALO: llegaste a la salida con %d/9 recuerdos.", g_memoria.total);
-        // TODO: mostrar la cinematica correspondiente (assets/cinematica_final) una
-        // vez que haya un sistema de pantallas/UI; por ahora el resultado queda en el log.
+        if (good) SDL_Log("FINAL: llegaste con los 9 recuerdos recuperados.");
+        else      SDL_Log("FINAL: llegaste con %d/9 recuerdos.", g_memoria.total);
+
+        // Bloquear controles del jugador y anular su gravedad
+        auto ctrl = other->getComponent<GatoController>();
+        if (ctrl) {
+            ctrl->controlsLocked = true;
+        }
+
+        // Crear la cinematica final en la escena
+        GameObject* cineObj = gameObject->scene->createGameObject("CinematicaFinal");
+        auto cine = cineObj->addComponent<CinematicaFinal>();
+        cine->playerObject = other;
     }
 private:
     bool reached = false;
