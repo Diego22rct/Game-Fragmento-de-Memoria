@@ -500,6 +500,7 @@ bool TilemapRenderer::loadTiledMap(const std::string& filePath) {
     std::string bgImage;
     bool newBgRepeatX = false;
     float newBgW = 0.0f, newBgH = 0.0f;
+    std::vector<TiledObject> newObjects;
 
     for (const auto& l : j["layers"]) {
         std::string type = l.value("type", std::string());
@@ -515,7 +516,23 @@ bool TilemapRenderer::loadTiledMap(const std::string& filePath) {
             }
             continue;
         }
-        if (type != "tilelayer") continue; // objectgroup (Objects) u otros: se leen aparte
+        if (type == "objectgroup") {
+            if (!l.contains("objects") || !l["objects"].is_array()) continue;
+            for (const auto& o : l["objects"]) {
+                std::string otype = o.value("type", std::string());
+                if (otype.empty()) continue; // objeto sin type: la guia dice ignorarlo
+                TiledObject obj;
+                obj.type = otype;
+                obj.name = o.value("name", std::string());
+                obj.x = o.value("x", 0.0f);
+                obj.y = o.value("y", 0.0f);
+                obj.width = o.value("width", 0.0f);
+                obj.height = o.value("height", 0.0f);
+                newObjects.push_back(std::move(obj));
+            }
+            continue;
+        }
+        if (type != "tilelayer") continue; // otros tipos de capa: no se leen aca
 
         if (!l.contains("data") || !l["data"].is_array() ||
             (int)l["data"].size() != newWidth * newHeight) {
@@ -552,6 +569,7 @@ bool TilemapRenderer::loadTiledMap(const std::string& filePath) {
     bgTexture = newBgTexture;
     bgRepeatX = newBgRepeatX;
     bgImgW = newBgW; bgImgH = newBgH;
+    objectsList = std::move(newObjects);
     tileW = newTileW; tileH = newTileH;
     mapWidth = newWidth; mapHeight = newHeight;
     multiMode = true;

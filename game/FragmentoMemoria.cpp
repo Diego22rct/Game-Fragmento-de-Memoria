@@ -394,6 +394,162 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// Estado de recuerdos recolectados (ver guia_programacion_level01.txt, seccion
+// "Fragmentos y logica de memoria"): 3 grupos de 3. grupo[0]=fragment1 (hospital),
+// grupo[1]=fragment2, grupo[2]=fragment3. Variable de archivo: un solo nivel a la
+// vez, se resetea sola en cada corrida del programa (no hace falta mas por ahora).
+// ---------------------------------------------------------------------------
+struct MemoriaState {
+    int total = 0;
+    int grupo[3] = { 0, 0, 0 };
+};
+static MemoriaState g_memoria;
+
+// ---------------------------------------------------------------------------
+// MemoriaFragment: fragmento de recuerdo REAL (leido de la capa Objects del
+// Nivel1.tmj), a diferencia de Fragmento (arriba), que es el placeholder de la
+// zona de prueba. Suma al contador de su grupo y lo loggea; cuando el grupo
+// llega a 3, ademas avisa que ese recuerdo quedo completo (la guia sugiere
+// mostrar ahi la imagen "preview" completa del pack de fragmentos, pero el
+// motor todavia no tiene un sistema de UI/pantallas para mostrarla).
+// ---------------------------------------------------------------------------
+class MemoriaFragment : public Component {
+public:
+    int group = 0; // 0, 1 o 2
+
+    void onCollision(GameObject* other) override {
+        if (other->name != "Player") return;
+        g_memoria.total++;
+        g_memoria.grupo[group]++;
+        SDL_Log("Fragmento de memoria (grupo %d) recogido: %d/9 total, grupo %d en %d/3",
+                group + 1, g_memoria.total, group + 1, g_memoria.grupo[group]);
+        if (g_memoria.grupo[group] == 3)
+            SDL_Log("Recuerdo %d COMPLETO (3/3)", group + 1);
+        gameObject->scene->destroy(gameObject);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// ExitZone: zona de salida del nivel (objeto "exit" de Objects). Al tocarla se
+// evalua el final segun la guia: bueno si los 3 grupos estan completos (3/3
+// cada uno), malo si no. 'reached' evita loggear el resultado en cada frame
+// mientras el jugador se queda parado adentro del trigger.
+// ---------------------------------------------------------------------------
+class ExitZone : public Component {
+public:
+    void onCollision(GameObject* other) override {
+        if (other->name != "Player" || reached) return;
+        reached = true;
+        bool good = g_memoria.grupo[0] == 3 && g_memoria.grupo[1] == 3 && g_memoria.grupo[2] == 3;
+        if (good) SDL_Log("FINAL BUENO: recuperaste los 9 recuerdos.");
+        else      SDL_Log("FINAL MALO: llegaste a la salida con %d/9 recuerdos.", g_memoria.total);
+        // TODO: mostrar la cinematica correspondiente (assets/cinematica_final) una
+        // vez que haya un sistema de pantallas/UI; por ahora el resultado queda en el log.
+    }
+private:
+    bool reached = false;
+};
+
+// ---------------------------------------------------------------------------
+// Enemy: enemigos y boss de la capa Objects. Tres comportamientos (ver la guia,
+// seccion "Tamanos de sprites importantes"):
+//  - Patrol: va y vuelve en X alrededor de su punto de spawn (enemigo hospital).
+//  - FloatChase: flota en su lugar; si el jugador esta cerca en X, lo persigue
+//    (enemigo adultez/ansiedad).
+//  - Boss: igual que FloatChase pero con mas rango y velocidad (BossShadow).
+// No usa RigidBody2D: no necesita gravedad ni colisionar con el piso, se mueve
+// derecho por Transform. El collider es TRIGGER (isTrigger=true) para no
+// empujar fisicamente al jugador: solo avisa el contacto via onCollision, que
+// llama a GatoController::hurt() (el mismo hook que ya usaba el gato para la
+// animacion de dano; no hay sistema de vidas todavia, ver CAMBIOS_NIVEL1.md).
+// ---------------------------------------------------------------------------
+enum class EnemyBehavior { Patrol, FloatChase, Boss };
+
+class Enemy : public Component {
+public:
+    EnemyBehavior behavior = EnemyBehavior::Patrol;
+    GameObject* target = nullptr; // el jugador; lo asigna buildFragmentoMemoria despues de crearlo
+
+    float speed = 70.0f;
+    float patrolRange = 150.0f; // Patrol: cuanto se aleja del spawn antes de dar vuelta
+    float chaseRange = 260.0f;  // FloatChase/Boss: distancia (en X) para empezar a perseguir
+    float floatAmplitude = 12.0f; // FloatChase en reposo: vaiven vertical suave
+    float hurtCooldown = 1.0f;    // no golpear todos los frames mientras se solapa con el jugador
+
+    void awake() override {
+        baseX = gameObject->transform->x;
+        baseY = gameObject->transform->y;
+    }
+
+    void update(float dt) override {
+        if (cooldown > 0.0f) cooldown -= dt;
+        Transform* t = gameObject->transform;
+        auto sprite = gameObject->getComponent<SpriteRenderer>();
+        auto anim = gameObject->getComponent<SpriteAnimator>();
+
+        if (behavior == EnemyBehavior::Patrol) {
+            t->x += dir * speed * dt;
+            if (t->x > baseX + patrolRange) dir = -1.0f;
+            else if (t->x < baseX - patrolRange) dir = 1.0f;
+            if (sprite) sprite->flipX = dir < 0.0f;
+            return;
+        }
+
+        // FloatChase y Boss: perseguir si el objetivo esta a menos de chaseRange en X.
+        bool chasing = target && std::fabs(target->transform->x - t->x) < chaseRange;
+        if (chasing) {
+            float dx = target->transform->x - t->x;
+            t->x += (dx > 0.0f ? 1.0f : -1.0f) * speed * dt;
+            if (sprite) sprite->flipX = dx < 0.0f;
+        } else if (behavior == EnemyBehavior::FloatChase) {
+            bobPhase += dt * 2.0f;
+            t->y = baseY + std::sin(bobPhase) * floatAmplitude;
+        }
+        if (anim && behavior == EnemyBehavior::FloatChase) anim->play(chasing ? "chase" : "float");
+    }
+
+    void onCollision(GameObject* other) override {
+        if (other->name != "Player" || cooldown > 0.0f) return;
+        if (auto* ctrl = other->getComponent<GatoController>()) ctrl->hurt();
+        cooldown = hurtCooldown;
+    }
+
+private:
+    float baseX = 0.0f, baseY = 0.0f;
+    float dir = 1.0f;
+    float bobPhase = 0.0f;
+    float cooldown = 0.0f;
+};
+
+// ---------------------------------------------------------------------------
+// Hud: contador visual de fragmentos (la guia pide "UI: contador de
+// fragmentos" en el orden de dibujo). Dibuja en coordenadas de PANTALLA fijas
+// arriba a la izquierda (no usa Camera ni Transform: por eso no sigue el
+// mundo), 3 filas de 3 cuadrados, una fila por grupo de memoria. Relleno =
+// recogido, solo el borde = todavia no. Sin texto (el motor no tiene
+// TextRenderer todavia, ver README.md "Pendiente").
+// ---------------------------------------------------------------------------
+class Hud : public Component {
+public:
+    void render() override {
+        SDL_Renderer* renderer = gameObject->scene->getRenderer();
+        const float size = 14.0f, gap = 4.0f, marginX = 12.0f, marginY = 12.0f;
+        const Uint8 colorsR[3] = { 220, 120, 180 };
+        const Uint8 colorsG[3] = { 120, 180, 220 };
+        const Uint8 colorsB[3] = { 120, 220, 120 };
+
+        for (int g = 0; g < 3; ++g) {
+            SDL_SetRenderDrawColor(renderer, colorsR[g], colorsG[g], colorsB[g], 255);
+            for (int i = 0; i < 3; ++i) {
+                SDL_FRect r{ marginX + i * (size + gap), marginY + g * (size + gap), size, size };
+                if (i < g_memoria.grupo[g]) SDL_RenderFillRect(renderer, &r);
+                else                        SDL_RenderRect(renderer, &r);
+            }
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Helpers de construccion de la escena
 // ---------------------------------------------------------------------------
 
@@ -437,6 +593,95 @@ static GameObject* crearFragmento(Scene& scene, float x, float y) {
     return f;
 }
 
+// Enemigo hospital: patrulla horizontal. La guia dice "el nombre dice hurt,
+// pero para gameplay conviene usar la animacion patrol como estado normal".
+static GameObject* crearEnemigoHospital(Scene& scene, float centerX, float centerY) {
+    GameObject* e = scene.createGameObject("EnemyHospital");
+    e->transform->x = centerX; e->transform->y = centerY;
+    e->addComponent<SpriteRenderer>();
+    auto anim = e->addComponent<SpriteAnimator>(64, 64, 1);
+    anim->addStripAnimation("patrol", "assets/enemies/enemy1_hospital_patrol_sheet_6x1.png", 64, 64, 8.0f);
+    anim->play("patrol");
+    auto col = e->addComponent<BoxCollider>();
+    col->width = 56.0f; col->height = 64.0f; col->isTrigger = true;
+    auto en = e->addComponent<Enemy>();
+    en->behavior = EnemyBehavior::Patrol;
+    return e;
+}
+
+// Enemigo adultez/ansiedad: flota en su lugar, persigue si el jugador se acerca.
+static GameObject* crearEnemigoAdultez(Scene& scene, float centerX, float centerY) {
+    GameObject* e = scene.createGameObject("EnemyAdulthood");
+    e->transform->x = centerX; e->transform->y = centerY;
+    e->addComponent<SpriteRenderer>();
+    auto anim = e->addComponent<SpriteAnimator>(64, 64, 1);
+    anim->addStripAnimation("float", "assets/enemies/enemy2_adulthood_float_sheet_8x1.png", 64, 64, 10.0f);
+    anim->addStripAnimation("chase", "assets/enemies/enemy2_adulthood_chase_sheet_8x1.png", 64, 64, 12.0f);
+    anim->play("float");
+    auto col = e->addComponent<BoxCollider>();
+    col->width = 56.0f; col->height = 56.0f; col->isTrigger = true;
+    auto en = e->addComponent<Enemy>();
+    en->behavior = EnemyBehavior::FloatChase;
+    return e;
+}
+
+// Boss (sombra del protagonista): igual logica que FloatChase pero con mas
+// alcance y velocidad; 128x128 segun la guia.
+static GameObject* crearBoss(Scene& scene, float centerX, float centerY) {
+    GameObject* e = scene.createGameObject("BossShadow");
+    e->transform->x = centerX; e->transform->y = centerY;
+    e->addComponent<SpriteRenderer>();
+    auto anim = e->addComponent<SpriteAnimator>(128, 128, 1);
+    anim->addStripAnimation("chase", "assets/enemies/boss_shadow_chase_sheet_8x1.png", 128, 128, 10.0f);
+    anim->play("chase");
+    auto col = e->addComponent<BoxCollider>();
+    col->width = 100.0f; col->height = 120.0f; col->isTrigger = true;
+    auto en = e->addComponent<Enemy>();
+    en->behavior = EnemyBehavior::Boss;
+    en->chaseRange = 500.0f;
+    en->speed = 90.0f;
+    return e;
+}
+
+// Fragmento de recuerdo REAL (grupo 0/1/2 = fragment1/2/3). indexInGroup elige
+// cual de las 3 imagenes del pack usar (solo variedad visual, sin logica extra).
+static const char* kFragmentImage[3][3] = {
+    { "assets/photo_fragments_collectibles/level1_hospital_fragment_01.png",
+      "assets/photo_fragments_collectibles/level1_hospital_fragment_02.png",
+      "assets/photo_fragments_collectibles/level1_hospital_fragment_03.png" },
+    { "assets/photo_fragments_collectibles/level2_adulthood_fragment_01.png",
+      "assets/photo_fragments_collectibles/level2_adulthood_fragment_02.png",
+      "assets/photo_fragments_collectibles/level2_adulthood_fragment_03.png" },
+    { "assets/photo_fragments_collectibles/level3_childhood_fragment_01.png",
+      "assets/photo_fragments_collectibles/level3_childhood_fragment_02.png",
+      "assets/photo_fragments_collectibles/level3_childhood_fragment_03.png" },
+};
+
+static GameObject* crearFragmentoReal(Scene& scene, float centerX, float centerY, int group, int indexInGroup) {
+    GameObject* f = scene.createGameObject("MemoriaFragment");
+    f->transform->x = centerX; f->transform->y = centerY;
+    f->addComponent<SpriteRenderer>(kFragmentImage[group][indexInGroup % 3]);
+    auto col = f->addComponent<BoxCollider>();
+    // Collider de 32x32 (el tamano del objeto en Tiled), aunque la imagen real
+    // sea 64x64: la guia dice que no afecta la logica, el sprite queda centrado.
+    col->width = 32.0f; col->height = 32.0f;
+    col->isTrigger = true;
+    auto mf = f->addComponent<MemoriaFragment>();
+    mf->group = group;
+    return f;
+}
+
+// Salida del nivel: zona trigger invisible (el debug F1 la muestra igual).
+static GameObject* crearSalida(Scene& scene, float centerX, float centerY, float w, float h) {
+    GameObject* e = scene.createGameObject("Exit");
+    e->transform->x = centerX; e->transform->y = centerY;
+    auto col = e->addComponent<BoxCollider>();
+    col->width = w; col->height = h;
+    col->isTrigger = true;
+    e->addComponent<ExitZone>();
+    return e;
+}
+
 // PlayerSpawn real de assets/Nivel1.tmj (capa Objects, id 1): x=41.33 y=477,
 // 64x64. Tiled da la esquina superior izquierda; el Transform del engine ancla
 // al CENTRO, por eso sumamos medio ancho/alto.
@@ -458,13 +703,51 @@ void buildFragmentoMemoria(Scene& scene) {
     if (!tm->loadTiledMap("assets/Nivel1.tmj"))
         SDL_Log("buildFragmentoMemoria: no se pudo cargar assets/Nivel1.tmj");
 
+    // --- objetos reales del nivel (capa Objects del tmj): spawn, 2 enemigos, boss,
+    //     9 fragmentos y salida. Tiled da la esquina superior izquierda de cada
+    //     objeto; el Transform del motor ancla al CENTRO, por eso se suma medio
+    //     ancho/alto (cx/cy) al convertir. Se crean ANTES que el jugador por el
+    //     mismo motivo que el Tilemap (orden de creacion = orden de dibujado; la
+    //     guia pide Jugador encima de fragmentos/enemigos/boss). Los enemigos y
+    //     el boss guardan su puntero en 'enemigos' para asignarles el jugador
+    //     como objetivo (target) recien despues de crearlo, un poco mas abajo. ---
+    float spawnX = kSpawnX, spawnY = kSpawnY; // fallback si no aparece PlayerSpawn
+    std::vector<Enemy*> enemigos;
+    int fragCount[3] = { 0, 0, 0 }; // cuenta por grupo: elige que imagen (01/02/03) usar
+
+    for (const auto& obj : tm->getObjects()) {
+        float cx = obj.x + obj.width * 0.5f;
+        float cy = obj.y + obj.height * 0.5f;
+
+        if (obj.type == "player") {
+            spawnX = cx; spawnY = cy;
+        } else if (obj.type == "enemy" && obj.name.find("hospital") != std::string::npos) {
+            enemigos.push_back(crearEnemigoHospital(scene, cx, cy)->getComponent<Enemy>());
+        } else if (obj.type == "enemy") {
+            enemigos.push_back(crearEnemigoAdultez(scene, cx, cy)->getComponent<Enemy>());
+        } else if (obj.type == "boss_shadow") {
+            enemigos.push_back(crearBoss(scene, cx, cy)->getComponent<Enemy>());
+        } else if (obj.type == "fragment1" || obj.type == "fragment") {
+            // "fragment" (sin numero) son los que la guia recomienda corregir en
+            // Tiled a fragment1; mientras tanto se cuentan como grupo 1 igual.
+            crearFragmentoReal(scene, cx, cy, 0, fragCount[0]++);
+        } else if (obj.type == "fragment2") {
+            crearFragmentoReal(scene, cx, cy, 1, fragCount[1]++);
+        } else if (obj.type == "fragment3") {
+            crearFragmentoReal(scene, cx, cy, 2, fragCount[2]++);
+        } else if (obj.type == "exit") {
+            crearSalida(scene, cx, cy, obj.width, obj.height);
+        }
+        // cualquier otro type (o vacio) se ignora: getObjects() ya filtro los sin type.
+    }
+
     // --- el gato: sprites propios (assets/animation_cat), frames de 64x64, mira
     //     a la derecha por defecto (flipX lo maneja el GatoController). Escala 1x:
     //     el nivel real (Nivel1.tmj) esta en tiles de 32x32 sin upscalear, y la
     //     guia pide un PlayerSpawn de 64x64 en esa misma escala 1:1. ---
     GameObject* player = scene.createGameObject("Player");
-    player->transform->x = kSpawnX;
-    player->transform->y = kSpawnY;
+    player->transform->x = spawnX;
+    player->transform->y = spawnY;
     player->addComponent<SpriteRenderer>();
     auto anim = player->addComponent<SpriteAnimator>(64, 64, 1);
     const std::string gato = "assets/animation_cat/";
@@ -487,7 +770,11 @@ void buildFragmentoMemoria(Scene& scene) {
     col->width = 44.0f; col->height = 42.0f; col->offsetY = 3.0f;
     auto ctrl = player->addComponent<GatoController>();
     ctrl->hasWaterGun = true; // SOLO nivel 3; activado aca para poder probarla ya
-    ctrl->spawnX = kSpawnX; ctrl->spawnY = kSpawnY; // respawn al caer / tecla R
+    ctrl->spawnX = spawnX; ctrl->spawnY = spawnY; // respawn al caer / tecla R
+
+    // El jugador recien existe aca: ahora si se lo asignamos como objetivo a los
+    // enemigos/boss que persiguen (FloatChase y Boss; Patrol lo ignora).
+    for (Enemy* en : enemigos) en->target = player;
 
     // --- zona de mecanicas (Efimera/Lucida/Fragmento de prueba): comentada por
     //     ahora, quedaban ubicadas para el nivel placeholder anterior y no
@@ -508,4 +795,7 @@ void buildFragmentoMemoria(Scene& scene) {
     auto f = cam->addComponent<FollowCamera>();
     f->setTarget(player);
     f->deadZoneWidth = 120.0f; f->deadZoneHeight = 120.0f;
+
+    // --- HUD: contador de fragmentos, ultimo para quedar dibujado encima de todo ---
+    scene.createGameObject("Hud")->addComponent<Hud>();
 }

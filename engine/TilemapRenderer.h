@@ -54,6 +54,22 @@ public:
     // gids simplemente no se dibujan (no rompe la carga del resto del mapa).
     bool loadTiledMap(const std::string& path);
 
+    // Un objeto de una capa objectgroup (p.ej. "Objects") leida por loadTiledMap:
+    // spawn del jugador, enemigos, fragmentos, salida, etc. x/y son la esquina
+    // SUPERIOR IZQUIERDA del objeto (convencion de Tiled), en pixeles de mundo;
+    // para convertir al CENTRO que usa el Transform del motor: cx = x + width/2,
+    // cy = y + height/2.
+    struct TiledObject {
+        std::string type;
+        std::string name;
+        float x = 0.0f, y = 0.0f, width = 0.0f, height = 0.0f;
+    };
+
+    // Objetos de todas las capas objectgroup leidas en el ultimo loadTiledMap()
+    // (vacio si no se llamo, o si el mapa no tenia ninguna). Se descartan los
+    // objetos sin 'type': la guia del nivel los marca como "vacio, ignorar".
+    const std::vector<TiledObject>& getObjects() const { return objectsList; }
+
     // Marca un indice de tile como solido (genera colision). Se puede llamar varias veces.
     void setSolid(int tileIndex);
 
@@ -91,6 +107,8 @@ private:
     SDL_Texture* bgTexture = nullptr;       // imagelayer de fondo (puede ser null)
     bool bgRepeatX = false;
     float bgImgW = 0.0f, bgImgH = 0.0f;     // tamano de la imagen de fondo (para tileado)
+
+    std::vector<TiledObject> objectsList;   // objetos de las capas objectgroup (ver getObjects)
 
     const SubTileset* findTileset(int gid) const; // el tileset al que pertenece ese gid
     void renderMulti();
