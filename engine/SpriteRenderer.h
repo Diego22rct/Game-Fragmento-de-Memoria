@@ -16,6 +16,13 @@ public:
     bool flipX = false; // espejo horizontal (mirar a izquierda/derecha)
     bool flipY = false; // espejo vertical
 
+    // Tinte de color (0-255 por canal; 255,255,255 = sin tinte, color original de
+    // la textura). Se multiplica sobre los pixeles al dibujar (SDL_SetTextureColorMod
+    // en el .cpp). Sirve para feedback visual (brillo del dash, flash de dano,
+    // color de una particula) sin necesitar un sprite nuevo por color.
+    int colorR = 255, colorG = 255, colorB = 255;
+    void setColor(int r, int g, int b) { colorR = r; colorG = g; colorB = b; }
+
     void awake() override;
     void render() override;
 

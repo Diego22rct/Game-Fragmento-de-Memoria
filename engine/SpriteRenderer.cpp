@@ -63,6 +63,12 @@ void SpriteRenderer::render() {
     SDL_FRect src{ srcX, srcY, srcW, srcH };
     const SDL_FRect* srcPtr = useSrcRect ? &src : nullptr;
 
+    // El tinte se aplica a la textura (no al dst): como el AssetManager cachea
+    // por ruta, dos objetos pueden compartir la misma textura, pero cada uno lo
+    // pone JUSTO ANTES de dibujarse, asi que no hay forma de que se "filtre" el
+    // color de uno al del otro (el render es secuencial, no concurrente).
+    SDL_SetTextureColorMod(texture, (Uint8)colorR, (Uint8)colorG, (Uint8)colorB);
+
     // center = nullptr => SDL rota alrededor del centro del dst, que ahora es el
     // centro real del sprite. Asi la rotacion tambien queda bien anclada.
     SDL_RenderTextureRotated(renderer, texture, srcPtr, &dst,

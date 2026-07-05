@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 #include <algorithm>
 
@@ -16,6 +17,37 @@
 #include "../engine/TilemapRenderer.h"
 #include "../engine/Camera.h"
 #include "../engine/FollowCamera.h"
+#include "../engine/Lifetime.h"
+
+// ---------------------------------------------------------------------------
+// crearParticulas: rafaga de 'count' particulas chiquitas que salen disparadas
+// en direcciones aleatorias y se autodestruyen solas. NO es un sistema de
+// particulas de verdad (sin pooling, sin curvas de tamano/alpha ni emisores):
+// son GameObjects sueltos, cada uno con SpriteRenderer (reusa "Dust Particle"
+// de Pixel Adventure, tenido con el color pedido via SpriteRenderer::setColor)
+// + RigidBody2D sin gravedad (constante, no colisiona con nada: no tiene
+// BoxCollider) + Lifetime (el motor ya trae esto para "balas, efectos o
+// cualquier cosa temporal"). Para efectos puntuales (dash, golpe) alcanza.
+// ---------------------------------------------------------------------------
+static void crearParticulas(Scene& scene, float x, float y, int count, int r, int g, int b) {
+    for (int i = 0; i < count; ++i) {
+        GameObject* p = scene.createGameObject("Particle");
+        p->transform->x = x; p->transform->y = y;
+        p->transform->scaleX = p->transform->scaleY = 0.5f; // Dust Particle es 16x16 -> 8x8
+
+        auto sr = p->addComponent<SpriteRenderer>("assets/pixel_adventure/Other/Dust Particle.png");
+        sr->setColor(r, g, b);
+
+        auto rb = p->addComponent<RigidBody2D>();
+        rb->gravityScale = 0.0f; // vuelan derecho, no caen
+        float angle = (std::rand() % 360) * 3.14159265f / 180.0f;
+        float speed = 60.0f + (std::rand() % 80);
+        rb->velocityX = std::cos(angle) * speed;
+        rb->velocityY = std::sin(angle) * speed;
+
+        p->addComponent<Lifetime>()->seconds = 0.25f + (std::rand() % 100) / 400.0f; // ~0.25-0.5s
+    }
+}
 
 // ---------------------------------------------------------------------------
 // LucidPlatform: plataforma OCULTA que solo existe mientras dura la "lucidez".
@@ -224,6 +256,7 @@ public:
         if (controlsLocked || damageCooldown > 0.0f) return;
         hurt();
         damageCooldown = damageCooldownTime;
+        crearParticulas(*gameObject->scene, gameObject->transform->x, gameObject->transform->y, 6, 220, 60, 60); // rafaga roja al golpe
         if (--lives <= 0) {
             lives = maxLives;
             gameOverPending = true; // el reset de posicion se hace en el proximo update() (ahi hay RigidBody2D a mano)
@@ -297,11 +330,13 @@ public:
             dashLeft -= dt;
             rb->velocityX = dashDirX * dashSpeed;
             rb->velocityY = dashDirY * dashSpeed;
+            if (sprite) sprite->setColor(150, 220, 255); // tinte "lucidez": celeste mientras dura el dash
             if (dashLeft <= 0.0f) {
                 dashing = false;
                 rb->gravityScale = 1.0f;
                 // Corte suave: si el dash iba hacia arriba no salimos disparados.
                 if (dashDirY < 0.0f) rb->velocityY *= 0.5f;
+                if (sprite) sprite->setColor(255, 255, 255); // volver al color normal
             }
             if (anim) anim->play("dash");
             if (sprite && dashDirX != 0.0f) sprite->flipX = dashDirX < 0.0f;
@@ -322,6 +357,7 @@ public:
             jumping = false;
             rb->gravityScale = 0.0f;
             LucidPlatform::revealAll(lucidez); // la lucidez ilumina los recuerdos ocultos
+            crearParticulas(*gameObject->scene, t->x, t->y, 8, 150, 220, 255); // rafaga celeste al arrancar
             jumpPrev = jumpNow; dashPrev = dashNow; waterPrev = waterNow;
             return;
         }
