@@ -43,6 +43,17 @@ public:
     // Ver el .cpp para los supuestos del export y la conversion de indices.
     bool loadFromTiledJson(const std::string& path);
 
+    // Carga un mapa de Tiled con VARIOS tilesets embebidos y VARIAS tilelayers (a
+    // diferencia de loadFromTiledJson, que asume uno solo de cada uno). Dibuja TODAS
+    // las tilelayers del archivo (Solid antes que decor antes que Hazards, sin
+    // importar el orden del archivo) y genera colisionadores solidos SOLO para la
+    // capa llamada "Solid": cualquier gid distinto de 0 ahi es solido (no hace falta
+    // marcar tiles individuales con properties). Si hay una imagelayer, se dibuja
+    // de fondo respetando repeatx. La capa de objetos (objectgroup) se ignora aca;
+    // se lee aparte. Tolera tilesets cuya imagen no exista todavia en disco: esos
+    // gids simplemente no se dibujan (no rompe la carga del resto del mapa).
+    bool loadTiledMap(const std::string& path);
+
     // Marca un indice de tile como solido (genera colision). Se puede llamar varias veces.
     void setSolid(int tileIndex);
 
@@ -53,6 +64,9 @@ public:
 private:
     bool isSolid(int tileIndex) const;
     void buildColliders();
+
+    // Rango de mundo visible en pantalla (segun camara/zoom activos), para cull.
+    void computeView(float& viewLeft, float& viewTop, float& viewRight, float& viewBottom) const;
 
     std::string path;
     SDL_Texture* texture = nullptr; // prestada por el AssetManager (no somos dueno)
@@ -65,4 +79,23 @@ private:
 
     std::vector<int> solids;        // indices de tile marcados como solidos
     bool built = false;             // ya se generaron los colliders?
+
+    // --- Modo multi-tileset / multi-capa (ver loadTiledMap) ---
+    struct SubTileset { SDL_Texture* texture = nullptr; int firstgid = 1; int columns = 1; };
+    struct TiledLayer { std::vector<int> gids; bool solid = false; }; // gids: convencion Tiled (0 = vacio)
+
+    bool multiMode = false;
+    std::vector<SubTileset> multiTilesets;  // ordenados por firstgid ascendente
+    std::vector<TiledLayer> multiLayers;    // en orden de dibujo
+
+    SDL_Texture* bgTexture = nullptr;       // imagelayer de fondo (puede ser null)
+    bool bgRepeatX = false;
+    float bgImgW = 0.0f, bgImgH = 0.0f;     // tamano de la imagen de fondo (para tileado)
+
+    const SubTileset* findTileset(int gid) const; // el tileset al que pertenece ese gid
+    void renderMulti();
+    void drawBackground(float viewLeft, float viewRight);
+    void drawLayer(const TiledLayer& layer, int colMin, int colMax, int rowMin, int rowMax,
+                   float worldTileW, float worldTileH);
+    void buildCollidersMulti();
 };

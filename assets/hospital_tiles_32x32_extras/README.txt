@@ -1,0 +1,1 @@
+Componentes extra 32x32 para hospital antiguo.\nCada PNG individual mide 32x32 px.\nUsa tileset_hospital_extras_32x32.png en Tiled con tile width/height = 32.\n

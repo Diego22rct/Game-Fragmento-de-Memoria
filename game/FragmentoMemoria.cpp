@@ -437,14 +437,34 @@ static GameObject* crearFragmento(Scene& scene, float x, float y) {
     return f;
 }
 
+// PlayerSpawn real de assets/Nivel1.tmj (capa Objects, id 1): x=41.33 y=477,
+// 64x64. Tiled da la esquina superior izquierda; el Transform del engine ancla
+// al CENTRO, por eso sumamos medio ancho/alto.
+static constexpr float kSpawnX = 41.333333f + 32.0f;
+static constexpr float kSpawnY = 477.0f + 32.0f;
+
 void buildFragmentoMemoria(Scene& scene) {
+    // --- terreno: Nivel1.tmj real (hospital/recuerdos/final), escala 1:1 con sus
+    //     coordenadas de Tiled (mismo sistema que PlayerSpawn/enemigos/fragmentos
+    //     de la guia). Tolera que falten hospital_tiles_32x32_extras,
+    //     hospital_corners_32x32 o fondo.png: esos tiles/fondo simplemente no se
+    //     ven todavia, pero el resto del mapa (y su colision) carga igual.
+    //     IMPORTANTE: se crea ANTES que el Player. El render es en orden de
+    //     creacion (pintor), y el mapa real trae un Fondo que cubre TODA la
+    //     pantalla: si el jugador se creara despues, el fondo lo taparia
+    //     (con el nivel de prueba viejo, sin fondo opaco, no se notaba). ---
+    GameObject* tilemap = scene.createGameObject("Tilemap");
+    auto tm = tilemap->addComponent<TilemapRenderer>();
+    if (!tm->loadTiledMap("assets/Nivel1.tmj"))
+        SDL_Log("buildFragmentoMemoria: no se pudo cargar assets/Nivel1.tmj");
+
     // --- el gato: sprites propios (assets/animation_cat), frames de 64x64, mira
-    //     a la derecha por defecto (flipX lo maneja el GatoController). Escala
-    //     2x (64*2=128) para quedar del mismo tamano en pantalla que antes con
-    //     el placeholder (32*4=128), asi el collider de abajo no cambia. ---
+    //     a la derecha por defecto (flipX lo maneja el GatoController). Escala 1x:
+    //     el nivel real (Nivel1.tmj) esta en tiles de 32x32 sin upscalear, y la
+    //     guia pide un PlayerSpawn de 64x64 en esa misma escala 1:1. ---
     GameObject* player = scene.createGameObject("Player");
-    player->transform->y = -150.0f;
-    player->transform->scaleX = player->transform->scaleY = 2.0f;
+    player->transform->x = kSpawnX;
+    player->transform->y = kSpawnY;
     player->addComponent<SpriteRenderer>();
     auto anim = player->addComponent<SpriteAnimator>(64, 64, 1);
     const std::string gato = "assets/animation_cat/";
@@ -461,37 +481,26 @@ void buildFragmentoMemoria(Scene& scene) {
     anim->play("idle");
     player->addComponent<RigidBody2D>();
     auto col = player->addComponent<BoxCollider>();
-    // Medido sobre el canal alfa real de idle/run/land (frame de 64x64, sin
-    // recortar): el cuerpo visible va de x=[10,56) y=[14,56) aprox, con
-    // padding transparente debajo de los pies (a diferencia del placeholder
-    // anterior, que llegaba casi al borde del frame). offsetY empuja el
-    // collider hacia abajo para que el piso quede a la altura de los pies
-    // visibles y no "flote". Si se reemplaza el sprite, medir de nuevo.
-    col->width = 88.0f; col->height = 84.0f; col->offsetY = 6.0f;
+    // Mismas proporciones que antes (cuerpo real del sprite, sin el padding
+    // transparente de los pies), pero a la mitad: la escala bajo de 2x a 1x.
+    // ponytail: valores a ojo desde el calculo anterior; retocar viendo F1.
+    col->width = 44.0f; col->height = 42.0f; col->offsetY = 3.0f;
     auto ctrl = player->addComponent<GatoController>();
     ctrl->hasWaterGun = true; // SOLO nivel 3; activado aca para poder probarla ya
+    ctrl->spawnX = kSpawnX; ctrl->spawnY = kSpawnY; // respawn al caer / tecla R
 
-    // --- terreno: por ahora el nivel de ejemplo del curso; reemplazar por los
-    //     mapas propios (nivel1/2/3 = infancia/adultez/vejez) hechos en Tiled ---
-    GameObject* tilemap = scene.createGameObject("Tilemap");
-    tilemap->transform->x = -960.0f;
-    tilemap->transform->y = -262.0f;
-    tilemap->transform->scaleX = tilemap->transform->scaleY = 4.0f;
-    auto tm = tilemap->addComponent<TilemapRenderer>();
-    if (!tm->loadFromTiledJson("assets/maps/platformer_level1.json"))
-        SDL_Log("buildFragmentoMemoria: no se pudo cargar assets/maps/platformer_level1.json");
-
-    // --- zona de prueba de mecanicas (posiciones tentativas: ajustar con F1) ---
-    // Escalera de recuerdos fragiles: obliga a no quedarse parado.
-    crearEfimera(scene, 250.0f, 60.0f);
-    crearEfimera(scene, 430.0f, -20.0f);
-    crearEfimera(scene, 610.0f, -100.0f);
-    // Camino oculto: solo visible/solido tras un Dash de Lucidez.
-    crearLucida(scene, 790.0f, -180.0f);
-    crearLucida(scene, 960.0f, -260.0f);
-    // Fragmentos de recuerdo: uno facil y otro al final del camino oculto.
-    crearFragmento(scene, -200.0f, 120.0f);
-    crearFragmento(scene, 960.0f, -360.0f);
+    // --- zona de mecanicas (Efimera/Lucida/Fragmento de prueba): comentada por
+    //     ahora, quedaban ubicadas para el nivel placeholder anterior y no
+    //     corresponden a las coordenadas del Nivel1.tmj real. Los objetos reales
+    //     (9 fragmentos, 2 enemigos, boss, salida) se leen de la capa Objects del
+    //     tmj en el proximo paso: por ahora solo se carga el mapa. ---
+    // crearEfimera(scene, 250.0f, 60.0f);
+    // crearEfimera(scene, 430.0f, -20.0f);
+    // crearEfimera(scene, 610.0f, -100.0f);
+    // crearLucida(scene, 790.0f, -180.0f);
+    // crearLucida(scene, 960.0f, -260.0f);
+    // crearFragmento(scene, -200.0f, 120.0f);
+    // crearFragmento(scene, 960.0f, -360.0f);
 
     // --- camara: zona muerta chica, el genero pide precision visual ---
     GameObject* cam = scene.createGameObject("MainCamera");

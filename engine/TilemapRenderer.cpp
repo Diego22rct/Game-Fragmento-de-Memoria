@@ -11,6 +11,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 TilemapRenderer::TilemapRenderer(std::string tilesetPath, int tileW, int tileH, int tilesetColumns)
     : path(std::move(tilesetPath)), tileW(tileW), tileH(tileH), tilesetColumns(tilesetColumns) {}
@@ -161,11 +162,11 @@ bool TilemapRenderer::loadFromFile(const std::string& filePath) {
 }
 
 void TilemapRenderer::update(float /*dt*/) {
-    // Build perezoso: el alumno llama setMap/setSolid DESPUES de addComponent, asi
-    // que en awake el mapa todavia esta vacio. Generamos los colliders la primera
-    // vez que corre el update, cuando el mapa ya esta definido.
+    // Build perezoso: el alumno llama setMap/setSolid (o loadTiledMap) DESPUES de
+    // addComponent, asi que en awake el mapa todavia esta vacio. Generamos los
+    // colliders la primera vez que corre el update, cuando el mapa ya esta definido.
     if (built) return;
-    buildColliders();
+    if (multiMode) buildCollidersMulti(); else buildColliders();
     built = true;
 }
 
@@ -316,26 +317,17 @@ void TilemapRenderer::buildColliders() {
     }
 }
 
-void TilemapRenderer::render() {
-    if (!texture || tiles.empty()) return;
-
+// Rectangulo de MUNDO que se ve en pantalla (para culling). Con camara, la vista
+// esta centrada en su Transform y escalada por el zoom; sin camara, pantalla == mundo.
+// Comun a render() (modo single) y renderMulti() (modo multi-capa).
+void TilemapRenderer::computeView(float& viewLeft, float& viewTop, float& viewRight, float& viewBottom) const {
     SDL_Renderer* renderer = gameObject->scene->getRenderer();
-    Transform* t = gameObject->transform;
     Camera* cam = gameObject->scene->getActiveCamera();
-
-    float worldTileW = tileW * t->scaleX;
-    float worldTileH = tileH * t->scaleY;
-    if (worldTileW <= 0.0f || worldTileH <= 0.0f) return;
-
     float zoom = cam ? cam->getZoom() : 1.0f;
 
     int outW = 0, outH = 0;
     SDL_GetCurrentRenderOutputSize(renderer, &outW, &outH);
 
-    // Rectangulo de MUNDO que se ve en pantalla, para dibujar solo las celdas
-    // visibles (culling). Con camara, la vista esta centrada en su Transform y
-    // escalada por el zoom; sin camara, pantalla == mundo.
-    float viewLeft, viewTop, viewRight, viewBottom;
     if (cam) {
         float camX = cam->gameObject->transform->x;
         float camY = cam->gameObject->transform->y;
@@ -347,6 +339,22 @@ void TilemapRenderer::render() {
         viewLeft = 0.0f; viewRight = (float)outW;
         viewTop = 0.0f;  viewBottom = (float)outH;
     }
+}
+
+void TilemapRenderer::render() {
+    if (multiMode) { renderMulti(); return; }
+    if (!texture || tiles.empty()) return;
+
+    SDL_Renderer* renderer = gameObject->scene->getRenderer();
+    Transform* t = gameObject->transform;
+    Camera* cam = gameObject->scene->getActiveCamera();
+
+    float worldTileW = tileW * t->scaleX;
+    float worldTileH = tileH * t->scaleY;
+    if (worldTileW <= 0.0f || worldTileH <= 0.0f) return;
+
+    float viewLeft, viewTop, viewRight, viewBottom;
+    computeView(viewLeft, viewTop, viewRight, viewBottom);
 
     // Bordes de mundo -> indices de columna/fila respecto al origen del mapa,
     // con clamp a los limites del mapa.
@@ -401,4 +409,283 @@ void TilemapRenderer::render() {
             SDL_RenderTexture(renderer, texture, &src, &dst);
         }
     }
+}
+
+// Carga un mapa de Tiled con varios tilesets embebidos y varias tilelayers. Ver el
+// header para el contrato completo (que capas se dibujan, cual da colision, etc.).
+bool TilemapRenderer::loadTiledMap(const std::string& filePath) {
+    using json = nlohmann::json;
+
+    std::ifstream file(filePath);
+    if (!file) {
+        SDL_Log("TilemapRenderer: no se pudo abrir '%s'", filePath.c_str());
+        return false;
+    }
+
+    json j;
+    try { file >> j; }
+    catch (const std::exception& e) {
+        SDL_Log("TilemapRenderer: JSON invalido en '%s': %s", filePath.c_str(), e.what());
+        return false;
+    }
+
+    if (!j.contains("width") || !j.contains("height") ||
+        !j.contains("tilewidth") || !j.contains("tileheight")) {
+        SDL_Log("TilemapRenderer: faltan width/height/tilewidth/tileheight en '%s'",
+                filePath.c_str());
+        return false;
+    }
+    int newWidth = j["width"].get<int>();
+    int newHeight = j["height"].get<int>();
+    int newTileW = j["tilewidth"].get<int>();
+    int newTileH = j["tileheight"].get<int>();
+
+    if (!j.contains("tilesets") || !j["tilesets"].is_array() || j["tilesets"].empty()) {
+        SDL_Log("TilemapRenderer: '%s' no tiene tilesets", filePath.c_str());
+        return false;
+    }
+
+    // Rutas de imagen (tilesets y fondo) vienen relativas al .tmj/.json.
+    std::string dir;
+    size_t slash = filePath.find_last_of("/\\");
+    if (slash != std::string::npos) dir = filePath.substr(0, slash + 1);
+
+    // Tilesets embebidos. Se toleran imagenes que todavia no existan en disco (el
+    // AssetManager devuelve nullptr y loggea una vez): esos gids no se dibujaran,
+    // pero el resto del mapa carga igual.
+    std::vector<SubTileset> newTilesets;
+    for (const auto& ts : j["tilesets"]) {
+        if (ts.contains("source")) {
+            SDL_Log("TilemapRenderer: tileset externo (.tsx) no soportado, se ignora ('%s')",
+                    filePath.c_str());
+            continue;
+        }
+        if (!ts.contains("image") || !ts.contains("columns") || !ts.contains("firstgid")) {
+            SDL_Log("TilemapRenderer: un tileset de '%s' no trae image/columns/firstgid, se ignora",
+                    filePath.c_str());
+            continue;
+        }
+        SubTileset st;
+        st.firstgid = ts["firstgid"].get<int>();
+        st.columns = ts["columns"].get<int>();
+        std::string imagePath = dir + ts["image"].get<std::string>();
+        st.texture = gameObject->scene->getAssets().loadTexture(imagePath); // puede ser null
+        newTilesets.push_back(st);
+    }
+    if (newTilesets.empty()) {
+        SDL_Log("TilemapRenderer: '%s' no tiene ningun tileset utilizable", filePath.c_str());
+        return false;
+    }
+    std::sort(newTilesets.begin(), newTilesets.end(),
+              [](const SubTileset& a, const SubTileset& b) { return a.firstgid < b.firstgid; });
+
+    if (!j.contains("layers") || !j["layers"].is_array()) {
+        SDL_Log("TilemapRenderer: '%s' no tiene layers", filePath.c_str());
+        return false;
+    }
+
+    // Orden de dibujo recomendado por la guia del nivel: Solid, luego decor, luego
+    // Hazards (encima de todo lo que no sea entidades). Cualquier otra tilelayer
+    // que aparezca se dibuja al final, en el orden del archivo.
+    auto layerPriority = [](const std::string& name) -> int {
+        if (name == "Solid") return 0;
+        if (name == "decor") return 1;
+        if (name == "Hazards") return 2;
+        return 3;
+    };
+
+    const unsigned FLIP_MASK = 0x1FFFFFFFu; // limpia los 3 bits altos de flip/rotacion
+    std::vector<std::pair<int, TiledLayer>> ordered;
+
+    std::string bgImage;
+    bool newBgRepeatX = false;
+    float newBgW = 0.0f, newBgH = 0.0f;
+
+    for (const auto& l : j["layers"]) {
+        std::string type = l.value("type", std::string());
+        std::string name = l.value("name", std::string());
+
+        if (type == "imagelayer") {
+            // Nos quedamos con la primera (o con la que se llame "Fondo" si hay varias).
+            if (bgImage.empty() || name == "Fondo") {
+                bgImage = l.value("image", std::string());
+                newBgRepeatX = l.value("repeatx", false);
+                newBgW = l.value("imagewidth", 0.0f);
+                newBgH = l.value("imageheight", 0.0f);
+            }
+            continue;
+        }
+        if (type != "tilelayer") continue; // objectgroup (Objects) u otros: se leen aparte
+
+        if (!l.contains("data") || !l["data"].is_array() ||
+            (int)l["data"].size() != newWidth * newHeight) {
+            SDL_Log("TilemapRenderer: la capa '%s' de '%s' no tiene 'data' valido, se ignora",
+                    name.c_str(), filePath.c_str());
+            continue;
+        }
+
+        TiledLayer layer;
+        layer.solid = (name == "Solid");
+        layer.gids.reserve(l["data"].size());
+        for (const auto& v : l["data"])
+            layer.gids.push_back((int)(v.get<unsigned>() & FLIP_MASK));
+
+        ordered.emplace_back(layerPriority(name), std::move(layer));
+    }
+    if (ordered.empty()) {
+        SDL_Log("TilemapRenderer: '%s' no tiene ninguna tilelayer utilizable", filePath.c_str());
+        return false;
+    }
+    std::stable_sort(ordered.begin(), ordered.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    std::vector<TiledLayer> newLayers;
+    newLayers.reserve(ordered.size());
+    for (auto& pr : ordered) newLayers.push_back(std::move(pr.second));
+
+    SDL_Texture* newBgTexture = nullptr;
+    if (!bgImage.empty()) newBgTexture = gameObject->scene->getAssets().loadTexture(dir + bgImage);
+
+    // Todo OK: recien ahora tocamos el estado real.
+    multiTilesets = std::move(newTilesets);
+    multiLayers = std::move(newLayers);
+    bgTexture = newBgTexture;
+    bgRepeatX = newBgRepeatX;
+    bgImgW = newBgW; bgImgH = newBgH;
+    tileW = newTileW; tileH = newTileH;
+    mapWidth = newWidth; mapHeight = newHeight;
+    multiMode = true;
+    built = false;
+    return true;
+}
+
+const TilemapRenderer::SubTileset* TilemapRenderer::findTileset(int gid) const {
+    for (int i = (int)multiTilesets.size() - 1; i >= 0; --i)
+        if (multiTilesets[i].firstgid <= gid) return &multiTilesets[i];
+    return nullptr;
+}
+
+void TilemapRenderer::buildCollidersMulti() {
+    Transform* t = gameObject->transform;
+    float worldTileW = tileW * t->scaleX;
+    float worldTileH = tileH * t->scaleY;
+
+    for (const TiledLayer& layer : multiLayers) {
+        if (!layer.solid) continue;
+        for (int row = 0; row < mapHeight; ++row) {
+            for (int col = 0; col < mapWidth; ++col) {
+                if (layer.gids[row * mapWidth + col] == 0) continue; // vacio: sin colision
+
+                GameObject* tileObj = gameObject->scene->createGameObject("TilemapCollider");
+                tileObj->transform->x = t->x + col * worldTileW + worldTileW * 0.5f;
+                tileObj->transform->y = t->y + row * worldTileH + worldTileH * 0.5f;
+                auto bc = tileObj->addComponent<BoxCollider>();
+                bc->width = worldTileW;
+                bc->height = worldTileH;
+            }
+        }
+    }
+}
+
+// Dibuja el fondo (imagelayer), tileado horizontalmente si repeatx=true. No se
+// cullea por celda: alcanza con cubrir el ancho visible.
+void TilemapRenderer::drawBackground(float viewLeft, float viewRight) {
+    if (!bgTexture || bgImgW <= 0.0f || bgImgH <= 0.0f) return;
+
+    SDL_Renderer* renderer = gameObject->scene->getRenderer();
+    Transform* t = gameObject->transform;
+    Camera* cam = gameObject->scene->getActiveCamera();
+
+    float bgW = bgImgW * t->scaleX;
+    float bgH = bgImgH * t->scaleY;
+
+    auto drawTile = [&](float worldLeft) {
+        float worldTop = t->y, worldRight = worldLeft + bgW, worldBottom = t->y + bgH;
+        SDL_FRect src{ 0.0f, 0.0f, bgImgW, bgImgH };
+
+        float sLeft, sTop, sRight, sBottom;
+        if (cam) {
+            cam->worldToScreen(worldLeft, worldTop, sLeft, sTop);
+            cam->worldToScreen(worldRight, worldBottom, sRight, sBottom);
+        } else {
+            sLeft = worldLeft; sTop = worldTop; sRight = worldRight; sBottom = worldBottom;
+        }
+        float dLeft = std::round(sLeft), dTop = std::round(sTop);
+        SDL_FRect dst{ dLeft, dTop, std::round(sRight) - dLeft, std::round(sBottom) - dTop };
+        SDL_RenderTexture(renderer, bgTexture, &src, &dst);
+    };
+
+    if (!bgRepeatX) { drawTile(t->x); return; }
+
+    // Arrancamos en el multiplo de bgW mas cercano (a la izquierda) del borde
+    // visible, y vamos tileando hacia la derecha hasta cubrir toda la vista.
+    float n = std::floor((viewLeft - t->x) / bgW);
+    for (float x = t->x + n * bgW; x < viewRight; x += bgW) drawTile(x);
+}
+
+void TilemapRenderer::drawLayer(const TiledLayer& layer, int colMin, int colMax, int rowMin, int rowMax,
+                                 float worldTileW, float worldTileH) {
+    SDL_Renderer* renderer = gameObject->scene->getRenderer();
+    Transform* t = gameObject->transform;
+    Camera* cam = gameObject->scene->getActiveCamera();
+
+    for (int row = rowMin; row <= rowMax; ++row) {
+        for (int col = colMin; col <= colMax; ++col) {
+            int gid = layer.gids[row * mapWidth + col];
+            if (gid == 0) continue; // vacio (convencion Tiled)
+
+            const SubTileset* sub = findTileset(gid);
+            if (!sub || !sub->texture) continue; // tileset sin imagen todavia: se omite
+
+            int local = gid - sub->firstgid;
+            int tsCol = local % sub->columns;
+            int tsRow = local / sub->columns;
+            SDL_FRect src{
+                (float)(tsCol * tileW), (float)(tsRow * tileH),
+                (float)tileW, (float)tileH };
+
+            float worldLeft = t->x + col * worldTileW;
+            float worldTop = t->y + row * worldTileH;
+            float worldRight = worldLeft + worldTileW;
+            float worldBottom = worldTop + worldTileH;
+
+            float sLeft, sTop, sRight, sBottom;
+            if (cam) {
+                cam->worldToScreen(worldLeft, worldTop, sLeft, sTop);
+                cam->worldToScreen(worldRight, worldBottom, sRight, sBottom);
+            } else {
+                sLeft = worldLeft; sTop = worldTop;
+                sRight = worldRight; sBottom = worldBottom;
+            }
+
+            float dLeft = std::round(sLeft);
+            float dTop = std::round(sTop);
+            SDL_FRect dst{
+                dLeft, dTop,
+                std::round(sRight) - dLeft,
+                std::round(sBottom) - dTop };
+
+            SDL_RenderTexture(renderer, sub->texture, &src, &dst);
+        }
+    }
+}
+
+void TilemapRenderer::renderMulti() {
+    Transform* t = gameObject->transform;
+    float worldTileW = tileW * t->scaleX;
+    float worldTileH = tileH * t->scaleY;
+    if (worldTileW <= 0.0f || worldTileH <= 0.0f) return;
+
+    float viewLeft, viewTop, viewRight, viewBottom;
+    computeView(viewLeft, viewTop, viewRight, viewBottom);
+
+    drawBackground(viewLeft, viewRight);
+
+    int colMin = std::max((int)std::floor((viewLeft - t->x) / worldTileW), 0);
+    int colMax = std::min((int)std::floor((viewRight - t->x) / worldTileW), mapWidth - 1);
+    int rowMin = std::max((int)std::floor((viewTop - t->y) / worldTileH), 0);
+    int rowMax = std::min((int)std::floor((viewBottom - t->y) / worldTileH), mapHeight - 1);
+
+    for (const TiledLayer& layer : multiLayers)
+        drawLayer(layer, colMin, colMax, rowMin, rowMax, worldTileW, worldTileH);
 }

@@ -1,0 +1,395 @@
+GUÍA PARA PROGRAMAR EL LEVEL 01 - JUEGO DEL GATO / RECUERDOS
+==============================================================
+
+Contexto general
+----------------
+Este mapa es un único nivel completo hecho en Tiled. El mapa mezcla hospital, recuerdos y final del juego. La idea es que el gato recorra el nivel, recolecte 9 fragmentos de memoria, evite peligros, enemigos y llegue a la salida.
+
+Formato del mapa
+----------------
+Archivo exportado desde Tiled: .tmj / JSON.
+Tamaño del mapa: 100 x 20 tiles.
+Tamaño de tile: 32 x 32 px.
+Tamaño total del nivel: 3200 x 640 px.
+Orientación: orthogonal.
+Render order: right-down.
+
+Capas principales del mapa
+--------------------------
+1. Fondo
+   Tipo: imagelayer.
+   Imagen usada: fondo.png.
+   Tiene repeatx = true.
+   Solo es visual. No debe tener colisión.
+
+2. Solid
+   Tipo: tilelayer.
+   Es la capa principal del escenario.
+   Aquí están pisos, paredes, bordes y plataformas.
+   Esta capa SÍ debe usarse para colisiones.
+   Cualquier tile distinto de 0 en esta capa puede tratarse como sólido.
+
+3. Hazards
+   Tipo: tilelayer.
+   Aquí están los peligros: vidrios, púas u obstáculos que dañan.
+   Esta capa NO debe ser piso normal.
+   Si el jugador toca cualquier tile distinto de 0 en esta capa, debe recibir daño, morir o reiniciar al último checkpoint.
+
+4. decor
+   Tipo: tilelayer.
+   Decoración visual del nivel.
+   No debe tener colisión.
+   Si el motor no permite dibujar muchas capas, esta capa se puede ignorar sin romper el gameplay.
+
+5. Objects
+   Tipo: objectgroup.
+   Aquí están las entidades del juego: spawn del jugador, enemigos, fragmentos, boss y salida.
+   Esta capa no se dibuja como parte del escenario. Solo se lee para crear objetos en código.
+
+Tilesets usados
+---------------
+1. tileset_hospital_32x32
+   Ruta: hospital_tiles_32x32/tileset_hospital_32x32.png
+   firstgid: 1
+   tile size: 32x32
+
+2. tileset_hospital_extras_32x32
+   Ruta: hospital_tiles_32x32_extras/tileset_hospital_extras_32x32.png
+   firstgid: 9
+   tile size: 32x32
+
+3. tileset_hospital_corners_32x32
+   Ruta: hospital_corners_32x32/tileset_hospital_corners_32x32.png
+   firstgid: 19
+   tile size: 32x32
+
+4. jump_up_sheet_2x1
+   Ruta: animation_cat/jump_up_sheet_2x1.png
+   firstgid: 31
+   OJO: este tileset parece haberse agregado al mapa, pero NO debería usarse como tileset de mapa.
+   El gato debe cargarse como sprite animado desde código, no como tile del mapa.
+
+Objetos colocados en la capa Objects
+------------------------------------
+IMPORTANTE:
+Las coordenadas están en píxeles, no en tiles.
+El mapa usa tiles de 32x32, pero los sprites pueden medir 64x64 o 128x128.
+
+1. PlayerSpawn
+   type: player
+   x: 41.333333333
+   y: 477
+   width: 64
+   height: 64
+   Uso: posición inicial del gato.
+   Sprite recomendado: white_cat_complete_64x64.
+
+2. enemy1_hospital_hurt
+   type: enemy
+   x: 1193.333333333
+   y: 208
+   width: 64
+   height: 74.64
+   Uso: enemigo de hospital.
+   Recomendación: tratarlo como EnemyHospital.
+   Sprite recomendado: enemy1_hospital_patrol_sheet_6x1.png.
+   El nombre dice hurt, pero para gameplay conviene usar la animación patrol como estado normal.
+
+3. enemy2_adulthood_float
+   type: enemy
+   x: 2694.666666667
+   y: 220
+   width: 64
+   height: 64
+   Uso: enemigo tipo ansiedad/adultez.
+   Sprite recomendado: enemy2_adulthood_float_sheet_8x1.png o enemy2_adulthood_chase_sheet_8x1.png.
+   Puede flotar o perseguir al jugador si está cerca.
+
+4. BossShadow
+   type: boss_shadow
+   x: 2699.333333333
+   y: 444
+   width: 128
+   height: 128
+   Uso: boss final / sombra del protagonista.
+   Sprite recomendado: boss_shadow_chase_sheet_8x1.png.
+   Tamaño del sprite: 128x128.
+
+5. Objeto vacío
+   id: 5
+   name: vacío
+   type: vacío
+   x: 2742
+   y: 624.666666666667
+   width: 1.33333333333303
+   height: 0
+   Recomendación: ignorarlo en código o borrarlo en Tiled.
+
+6. Fragment
+   type: fragment1
+   x: 64
+   y: 255
+   width: 32
+   height: 32
+   Uso: fragmento de memoria tipo 1.
+
+7. Fragment 2
+   type: fragment
+   x: 767.25
+   y: 160.25
+   width: 32
+   height: 32
+   Uso: fragmento de memoria. Recomendación: corregir type a fragment1 si pertenece al primer grupo.
+
+8. Fragment 3
+   type: fragment
+   x: 1098.33333333333
+   y: 369
+   width: 32
+   height: 32
+   Uso: fragmento de memoria. Recomendación: corregir type a fragment1 si pertenece al primer grupo.
+
+9. Fragment 4
+   type: fragment2
+   x: 1497
+   y: 249
+   width: 32
+   height: 32
+   Uso: fragmento de memoria tipo 2.
+
+10. Fragment 5
+    type: fragment2
+    x: 1892
+    y: 385
+    width: 32
+    height: 32
+    Uso: fragmento de memoria tipo 2.
+
+11. Fragment 6
+    type: fragment2
+    x: 1945
+    y: 248
+    width: 32
+    height: 32
+    Uso: fragmento de memoria tipo 2.
+
+12. Fragment 7
+    type: fragment3
+    x: 2877
+    y: 255
+    width: 32
+    height: 32
+    Uso: fragmento de memoria tipo 3.
+
+13. Fragment 8
+    type: fragment3
+    x: 3104
+    y: 222
+    width: 32
+    height: 32
+    Uso: fragmento de memoria tipo 3.
+
+14. Fragment 9
+    type: fragment3
+    x: 2913
+    y: 542
+    width: 32
+    height: 32
+    Uso: fragmento de memoria tipo 3.
+
+15. Exit
+    type: exit
+    x: 3157
+    y: 384.5
+    width: 31.5
+    height: 190
+    Uso: zona final / salida del nivel.
+    Si el jugador toca esta zona, se evalúa si obtuvo final bueno o malo.
+
+Fragmentos y lógica de memoria
+------------------------------
+Hay 9 fragmentos en total, divididos en 3 grupos:
+
+Grupo 1: fragment1
+- Fragment
+- Fragment 2, si se corrige
+- Fragment 3, si se corrige
+
+Grupo 2: fragment2
+- Fragment 4
+- Fragment 5
+- Fragment 6
+
+Grupo 3: fragment3
+- Fragment 7
+- Fragment 8
+- Fragment 9
+
+Recomendación de código:
+- Todos pueden tratarse como objetos recolectables.
+- Si type == fragment1, suma al recuerdo 1.
+- Si type == fragment2, suma al recuerdo 2.
+- Si type == fragment3, suma al recuerdo 3.
+- Si type == fragment, también puede contarse como fragment1 o como genérico, pero sería mejor corregirlo en Tiled para evitar confusión.
+
+Variables recomendadas:
+
+int totalFragments = 0;
+int memory1Fragments = 0;
+int memory2Fragments = 0;
+int memory3Fragments = 0;
+
+Cuando el jugador toca un fragmento:
+- eliminar/ocultar ese fragmento
+- totalFragments++
+- según el type, sumar a memory1Fragments, memory2Fragments o memory3Fragments
+
+Condición para final bueno:
+
+if (memory1Fragments == 3 && memory2Fragments == 3 && memory3Fragments == 3) {
+    goodEnding = true;
+}
+else {
+    goodEnding = false;
+}
+
+También se puede simplificar:
+
+if (totalFragments >= 9) {
+    goodEnding = true;
+}
+
+Pero es más correcto validar los 3 grupos completos.
+
+Tamaños de sprites importantes
+------------------------------
+Gato protagonista:
+- Sprite: 64x64 por frame.
+- En Tiled solo aparece como PlayerSpawn de 64x64.
+- Las animaciones se cargan desde código.
+- Usar flip horizontal para mirar a la izquierda.
+
+Enemigo hospital:
+- Sprite: 64x64 por frame.
+- Patrulla horizontal.
+- Daño por contacto.
+
+Enemigo ansiedad/adultez:
+- Sprite: 64x64 por frame.
+- Puede flotar o perseguir si el jugador está cerca.
+- Daño por contacto.
+
+BossShadow:
+- Sprite: 128x128 por frame.
+- Debe aparecer cerca del final.
+- Puede perseguir al jugador o bloquear la salida.
+
+Fragmentos:
+- En el mapa están como objetos de 32x32.
+- Si las imágenes reales son de 64x64, se puede dibujar el sprite centrado sobre el rectángulo o cambiar los objetos en Tiled a 64x64.
+- No afecta la lógica si se usa un rectángulo de colisión de 32x32.
+
+Salida:
+- Rectángulo vertical de 31.5 x 190 px.
+- Sirve como trigger final.
+
+Lógica de colisiones recomendada
+--------------------------------
+1. Colisión con Solid:
+   - Revisar tiles alrededor del jugador.
+   - Si un tile de Solid es distinto de 0, tratarlo como bloque sólido.
+   - Resolver colisión en X y luego en Y.
+
+2. Colisión con Hazards:
+   - Si el rectángulo del jugador toca un tile no cero de Hazards, aplicar daño o reiniciar.
+
+3. Colisión con fragmentos:
+   - Si el rectángulo del jugador toca el rectángulo del fragmento, recogerlo.
+
+4. Colisión con enemigos:
+   - Si el jugador toca enemigo, recibir daño o reiniciar.
+
+5. Colisión con Exit:
+   - Si el jugador toca Exit, revisar fragmentos y lanzar final bueno o malo.
+
+Cámara recomendada
+------------------
+El nivel mide 3200 px de ancho.
+La pantalla probablemente será menor, por ejemplo 1280x720 o 1366x768.
+La cámara debe seguir al gato en X.
+
+Ejemplo de lógica:
+
+cameraX = player.x - screenWidth / 2;
+if (cameraX < 0) cameraX = 0;
+if (cameraX > mapWidthPx - screenWidth) cameraX = mapWidthPx - screenWidth;
+
+Al dibujar:
+- dibujar tiles en x - cameraX
+- dibujar objetos en x - cameraX
+
+Notas importantes para evitar errores
+-------------------------------------
+1. No dibujar la capa Objects como si fuera mapa.
+   Solo se lee para crear entidades.
+
+2. Ignorar cualquier objeto sin type.
+   Hay un objeto vacío en el mapa.
+
+3. El gato y enemigos no deben salir del tileset del mapa.
+   Deben cargarse como sprites animados.
+
+4. El tileset jump_up_sheet_2x1 aparece dentro del mapa, pero no debería usarse para construir el escenario.
+   Si causa problemas, se puede quitar del Tiled después.
+
+5. Los fragmentos 2 y 3 tienen type fragment, mientras que los otros grupos usan fragment1, fragment2 y fragment3.
+   Recomendación: corregir en Tiled para que queden así:
+   - Fragment 1, 2, 3: type fragment1
+   - Fragment 4, 5, 6: type fragment2
+   - Fragment 7, 8, 9: type fragment3
+
+6. Las coordenadas de algunos objetos tienen decimales.
+   En código se pueden convertir a int:
+   int x = (int)object.x;
+   int y = (int)object.y;
+
+7. La capa Fondo es una imagelayer.
+   Si el motor no soporta imagelayer, se puede dibujar fondo.png manualmente antes de dibujar el mapa.
+
+Orden recomendado de dibujo
+---------------------------
+1. Fondo / background image.
+2. Solid.
+3. decor.
+4. Hazards.
+5. Fragmentos.
+6. Enemigos.
+7. Boss.
+8. Jugador.
+9. UI: contador de fragmentos, vidas, etc.
+
+Orden recomendado de actualización
+----------------------------------
+1. Leer input del jugador.
+2. Actualizar física del jugador.
+3. Resolver colisión con Solid.
+4. Revisar Hazards.
+5. Actualizar enemigos.
+6. Revisar colisión jugador-enemigos.
+7. Revisar recolección de fragmentos.
+8. Revisar salida.
+9. Actualizar cámara.
+10. Dibujar todo.
+
+Resumen para implementación rápida
+----------------------------------
+- Cargar level_01.json o level_01.tmj.
+- Dibujar Fondo si el motor lo permite.
+- Dibujar la capa Solid.
+- Usar Solid para colisiones.
+- Dibujar decor y Hazards.
+- Usar Hazards para daño.
+- Leer Objects para crear PlayerSpawn, enemigos, boss, fragmentos y salida.
+- Recoger 9 fragmentos.
+- Al tocar Exit, mostrar final bueno si tiene todos los fragmentos; si no, final malo.
+

@@ -8,8 +8,8 @@ void FollowCamera::update(float dt) {
     Transform* cam = gameObject->transform;
     Transform* tgt = target->transform;
 
-    float halfW = deadZoneWidth  * 0.5f;
-    float halfH = deadZoneHeight * 0.5f;
+    float halfW = deadZoneWidth  * 1.5f;
+    float halfH = deadZoneHeight * 1.5f;
 
     // Por defecto la camara se queda donde esta...
     float desiredX = cam->x;
