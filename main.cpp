@@ -8,20 +8,21 @@
 #include "game/Platformer.h"
 #include "game/TopDown.h"
 #include "game/Shooter.h"
+#include "game/FragmentoMemoria.h"
 
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("Error al inicializar SDL: %s", SDL_GetError());
         return 1;
     }
-    SDL_Window* window = SDL_CreateWindow("Ejemplo 1: Platformer  (1/2/3 cambia, F1 debug)", 1280, 720, 0);
+    SDL_Window* window = SDL_CreateWindow("Fragmento de Memoria  (4 juego, 1/2/3 ejemplos, F1 debug)", 1280, 720, 0);
     if (!window) { SDL_Quit(); return 1; }
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (!renderer) { SDL_DestroyWindow(window); SDL_Quit(); return 1; }
 
     auto scene = std::make_unique<Scene>(renderer);
-    buildPlatformer(*scene);
-    int current = 1;
+    buildFragmentoMemoria(*scene); // el proyecto final arranca por defecto
+    int current = 4;
 
     bool running = true;
     Uint64 lastTime = SDL_GetTicks();
@@ -42,13 +43,15 @@ int main(int argc, char* argv[]) {
                 if (event.key.scancode == SDL_SCANCODE_1) sel = 1;
                 if (event.key.scancode == SDL_SCANCODE_2) sel = 2;
                 if (event.key.scancode == SDL_SCANCODE_3) sel = 3;
+                if (event.key.scancode == SDL_SCANCODE_4) sel = 4;
 
                 if (sel != 0 && sel != current) {
                     current = sel;
                     scene = std::make_unique<Scene>(renderer);
-                    if (sel == 1) { buildPlatformer(*scene); SDL_SetWindowTitle(window, "Ejemplo 1: Platformer  (1/2/3 cambia, F1 debug)"); }
-                    if (sel == 2) { buildTopDown(*scene);    SDL_SetWindowTitle(window, "Ejemplo 2: Top-down  (1/2/3 cambia, F1 debug)"); }
-                    if (sel == 3) { buildShooter(*scene);    SDL_SetWindowTitle(window, "Ejemplo 3: Shooter  (1/2/3 cambia, F1 debug)"); }
+                    if (sel == 1) { buildPlatformer(*scene); SDL_SetWindowTitle(window, "Ejemplo 1: Platformer  (1/2/3/4 cambia, F1 debug)"); }
+                    if (sel == 2) { buildTopDown(*scene);    SDL_SetWindowTitle(window, "Ejemplo 2: Top-down  (1/2/3/4 cambia, F1 debug)"); }
+                    if (sel == 3) { buildShooter(*scene);    SDL_SetWindowTitle(window, "Ejemplo 3: Shooter  (1/2/3/4 cambia, F1 debug)"); }
+                    if (sel == 4) { buildFragmentoMemoria(*scene); SDL_SetWindowTitle(window, "Fragmento de Memoria  (4 juego, 1/2/3 ejemplos, F1 debug)"); }
                 }
             }
         }

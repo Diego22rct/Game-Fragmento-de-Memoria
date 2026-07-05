@@ -415,3 +415,10 @@ vcpkg_installed/
 # el tileset (.png) y el .tiled-project (config compartida del editor).
 # Solo se ignora el estado local de cada editor:
 *.tiled-session
+
+# --- SDL3 / SDL3_image vendorizadas (engine/third_party) ---
+# La regla generica "x64/" de mas arriba (pensada para carpetas de build) tambien
+# atrapa engine/third_party/SDL3/lib/x64 y SDL3_image/lib/x64, que NO son build
+# output sino los binarios vendorizados del motor. Se re-incluyen a proposito.
+!engine/third_party/SDL3/lib/x64/
+!engine/third_party/SDL3_image/lib/x64/

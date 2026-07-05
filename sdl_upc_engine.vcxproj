@@ -28,6 +28,7 @@
     <ClCompile Include="engine\SpriteAnimator.cpp" />
     <ClCompile Include="engine\SpriteRenderer.cpp" />
     <ClCompile Include="engine\TilemapRenderer.cpp" />
+    <ClCompile Include="game\FragmentoMemoria.cpp" />
     <ClCompile Include="game\Platformer.cpp" />
     <ClCompile Include="game\Shooter.cpp" />
     <ClCompile Include="game\TopDown.cpp" />
@@ -48,6 +49,7 @@
     <ClInclude Include="engine\TilemapRenderer.h" />
     <ClInclude Include="engine\third_party\nlohmann\json.hpp" />
     <ClInclude Include="engine\Transform.h" />
+    <ClInclude Include="game\FragmentoMemoria.h" />
     <ClInclude Include="game\Platformer.h" />
     <ClInclude Include="game\Shooter.h" />
     <ClInclude Include="game\TopDown.h" />
@@ -136,18 +138,18 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\SDL3\include; D:\SDL3_image\include; $(ProjectDir)engine\third_party</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>D:\SDL3\lib\x64;D:\SDL3_image\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>SDL3.lib;SDL3_image.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y "D:\SDL3\lib\x64\SDL3.dll" "$(OutDir)"
-xcopy /y "D:\SDL3_image\lib\x64\SDL3_image.dll" "$(OutDir)"
+      <Command>xcopy /y "$(ProjectDir)engine\third_party\SDL3\lib\x64\SDL3.dll" "$(OutDir)"
+xcopy /y "$(ProjectDir)engine\third_party\SDL3_image\lib\x64\SDL3_image.dll" "$(OutDir)"
 xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -159,11 +161,20 @@ xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y "$(ProjectDir)engine\third_party\SDL3\lib\x64\SDL3.dll" "$(OutDir)"
+xcopy /y "$(ProjectDir)engine\third_party\SDL3_image\lib\x64\SDL3_image.dll" "$(OutDir)"
+xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

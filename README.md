@@ -102,26 +102,22 @@ ejecutable de consola). No hay solución `.sln` ni `CMakeLists.txt` en el repo: 
 
 ### Requisitos
 
-- **Visual Studio 2026** con el toolset de C++ (PlatformToolset `v145`), C++17.
-- **SDL3** y **SDL3_image** instalados **manualmente**. El proyecto los espera en estas rutas
-  (configuradas en `sdl_upc_engine.vcxproj`, plataforma **x64**):
-  - Includes: `D:\SDL3\include`, `D:\SDL3_image\include`
-  - Libs: `D:\SDL3\lib\x64`, `D:\SDL3_image\lib\x64`
-  - DLLs: `D:\SDL3\lib\x64\SDL3.dll`, `D:\SDL3_image\lib\x64\SDL3_image.dll`
-
-  > Si instalaste SDL3 en otra ruta, ajusta `AdditionalIncludeDirectories`,
-  > `AdditionalLibraryDirectories` y el `PostBuildEvent` del `.vcxproj`.
-- **nlohmann/json** (para leer mapas de Tiled en JSON) **ya viene incluida en el repo**, en
-  `engine/third_party/nlohmann/json.hpp` (single-include, header-only). **No requiere instalar
-  nada ni vcpkg**: al clonar el repo la tienes lista. El proyecto añade `engine/third_party`
-  como *include directory*, así que en el código basta `#include <nlohmann/json.hpp>`.
+- **Visual Studio 2026** con el toolset de C++ (PlatformToolset `v145`), C++17. (Si tu VS es
+  2022, en el primer build te va a ofrecer "Retarget projects": aceptalo para pasar a `v143`.)
+- **SDL3**, **SDL3_image** y **nlohmann/json** **ya vienen vendorizadas en el repo**, en
+  `engine/third_party/` (`SDL3/`, `SDL3_image/` y `nlohmann/json.hpp`). **No hace falta instalar
+  nada ni configurar vcpkg**: al clonar el repo están listas y el `.vcxproj` ya apunta ahí con
+  rutas relativas (`$(ProjectDir)engine\third_party\...`), tanto para Debug como para Release.
+  Son los binarios oficiales de **[libsdl.org](https://www.libsdl.org/)** (paquete "VC", x64);
+  sus licencias están en `engine/third_party/SDL3/LICENSE.txt` y
+  `engine/third_party/SDL3_image/LICENSE.txt`.
 
 ### Pasos
 
-1. Instala SDL3 y SDL3_image en `D:\SDL3` y `D:\SDL3_image` (o ajusta las rutas del proyecto).
-2. Abre `sdl_upc_engine.vcxproj` en Visual Studio 2026.
-3. Selecciona la configuración **x64** (las rutas de SDL y la copia de DLLs/`assets` están
-   cableadas para **x64 Debug**).
+1. Clona el repo (con `git clone`, sin descargar nada aparte).
+2. Abre `sdl_upc_engine.vcxproj` en Visual Studio.
+3. Selecciona la configuración **x64** (Debug o Release; ambas ya tienen las rutas de SDL
+   cableadas).
 4. Compila y ejecuta (F5). El evento post-build copia automáticamente `SDL3.dll`,
    `SDL3_image.dll` y la carpeta `assets/` junto al ejecutable.
 
@@ -241,6 +237,10 @@ punteros a objetos destruidos.
   *JSON for Modern C++* usada para leer los mapas de Tiled. Licencia **MIT**. Se incluye
   **vendorizada** en el repo (`engine/third_party/nlohmann/json.hpp`, single-include), con su
   cabecera de licencia MIT intacta; no requiere instalación.
+- **[SDL3](https://www.libsdl.org/)** y **[SDL3_image](https://github.com/libsdl-org/SDL_image)**
+  de **libsdl.org** — binarios oficiales (paquete "VC", x64) **vendorizados** en el repo
+  (`engine/third_party/SDL3/` y `engine/third_party/SDL3_image/`), con sus licencias **zlib**
+  intactas; no requiere instalación manual.
 
 ### Assets
 

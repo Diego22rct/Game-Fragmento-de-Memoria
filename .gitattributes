@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Binarios vendorizados (SDL3/SDL3_image): nunca normalizar como texto.
+*.dll binary
+*.lib binary
