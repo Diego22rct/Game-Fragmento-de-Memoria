@@ -8,9 +8,7 @@
 #include "game/FragmentoMemoria.h"
 
 // Nota: game/Platformer, TopDown y Shooter son los ejemplos del motor del
-// curso (profesor); quedan en el repo como referencia pero ya no se arman
-// aca. El punto de entrada del proyecto final es unicamente Fragmento de
-// Memoria.
+// curso; ahora solo quedo la referenia a nuestro juego.
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("Error al inicializar SDL: %s", SDL_GetError());
