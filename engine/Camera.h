@@ -7,7 +7,7 @@
 
 class Camera : public Component {
 public:
-    float zoom = 1.0f; // 1 = normal, 2 = acercado, 0.5 = alejado
+    float zoom = 1.2f; // 1 = normal, 2 = acercado, 0.5 = alejado
 
     void awake() override; // se registra como la camara activa de la escena
 

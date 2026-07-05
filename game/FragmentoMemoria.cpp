@@ -767,7 +767,7 @@ void buildFragmentoMemoria(Scene& scene) {
     // Mismas proporciones que antes (cuerpo real del sprite, sin el padding
     // transparente de los pies), pero a la mitad: la escala bajo de 2x a 1x.
     // ponytail: valores a ojo desde el calculo anterior; retocar viendo F1.
-    col->width = 44.0f; col->height = 42.0f; col->offsetY = 3.0f;
+    col->width = 32.0f; col->height = 32.0f; col->offsetY = 3.0f;
     auto ctrl = player->addComponent<GatoController>();
     ctrl->hasWaterGun = true; // SOLO nivel 3; activado aca para poder probarla ya
     ctrl->spawnX = spawnX; ctrl->spawnY = spawnY; // respawn al caer / tecla R
@@ -784,7 +784,7 @@ void buildFragmentoMemoria(Scene& scene) {
     // crearEfimera(scene, 250.0f, 60.0f);
     // crearEfimera(scene, 430.0f, -20.0f);
     // crearEfimera(scene, 610.0f, -100.0f);
-    // crearLucida(scene, 790.0f, -180.0f);
+    // crearLucida(scene, 100.0f, 60.0f);
     // crearLucida(scene, 960.0f, -260.0f);
     // crearFragmento(scene, -200.0f, 120.0f);
     // crearFragmento(scene, 960.0f, -360.0f);
