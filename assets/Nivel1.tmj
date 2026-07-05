@@ -14,7 +14,7 @@
          "tintcolor":"#466d7e",
          "transparentcolor":"#44526f",
          "type":"imagelayer",
-         "visible":false,
+         "visible":true,
          "x":0,
          "y":0
         }, 
@@ -106,7 +106,7 @@
          "name":"decor",
          "opacity":1,
          "type":"tilelayer",
-         "visible":false,
+         "visible":true,
          "width":100,
          "x":0,
          "y":0
