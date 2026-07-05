@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37314.3 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "sdl_upc_engine", "sdl_upc_engine.vcxproj", "{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Debug|x64.ActiveCfg = Debug|x64
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Debug|x64.Build.0 = Debug|x64
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Debug|x86.ActiveCfg = Debug|Win32
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Debug|x86.Build.0 = Debug|Win32
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Release|x64.ActiveCfg = Release|x64
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Release|x64.Build.0 = Release|x64
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Release|x86.ActiveCfg = Release|Win32
+		{C35AE344-1DB7-4C8C-87AC-39369D5DF91E}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1BF5222D-E480-4980-A866-694D1EA9FDC6}
+	EndGlobalSection
+EndGlobal
