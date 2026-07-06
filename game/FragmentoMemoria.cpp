@@ -19,6 +19,15 @@
 #include "../engine/FollowCamera.h"
 #include "../engine/Lifetime.h"
 
+
+static bool g_reiniciarNivel = false;
+
+bool consumirReinicioFragmentoMemoria() {
+    if (!g_reiniciarNivel) return false;
+    g_reiniciarNivel = false;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // crearParticulas: rafaga de 'count' particulas chiquitas que salen disparadas
 // en direcciones aleatorias y se autodestruyen solas. NO es un sistema de
@@ -48,6 +57,7 @@ static void crearParticulas(Scene& scene, float x, float y, int count, int r, in
         p->addComponent<Lifetime>()->seconds = 0.25f + (std::rand() % 100) / 400.0f; // ~0.25-0.5s
     }
 }
+static int g_monstruosVivos = 0;
 
 // ---------------------------------------------------------------------------
 // LucidPlatform: plataforma OCULTA que solo existe mientras dura la "lucidez".
@@ -212,6 +222,175 @@ public:
 // Controles: flechas mueven (y apuntan el dash), Espacio salta, X o Shift
 // dash, C dispara agua hacia abajo (si hasWaterGun), R reinicia al spawn.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// PantallaFin: pantalla negra de derrota. No usa TextRenderer ni fuentes.
+// Dibuja "FIN" manualmente con rectangulos blancos.
+// ---------------------------------------------------------------------------
+class PantallaFin : public Component {
+public:
+    void update(float dt) override {
+        const bool* keys = SDL_GetKeyboardState(nullptr);
+        bool enterNow = keys[SDL_SCANCODE_RETURN];
+
+        if (enterNow && !prevEnter) {
+            g_reiniciarNivel = true;
+        }
+
+        prevEnter = enterNow;
+    }
+
+    void render() override {
+        SDL_Renderer* renderer = gameObject->scene->getRenderer();
+
+        // Fondo negro pantalla completa
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_FRect bg{ 0.0f, 0.0f, 1280.0f, 720.0f };
+        SDL_RenderFillRect(renderer, &bg);
+
+        // Texto "FIN" centrado, hecho con bloques
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+        const float block = 24.0f;
+        const float gap = 4.0f;
+        const float startX = 1280.0f / 2.0f - 210.0f;
+        const float startY = 720.0f / 2.0f - 90.0f;
+
+        drawLetterF(renderer, startX, startY, block, gap);
+        drawLetterI(renderer, startX + 150.0f, startY, block, gap);
+        drawLetterN(renderer, startX + 300.0f, startY, block, gap);
+    }
+
+private:
+    bool prevEnter = true;
+    void drawBlock(SDL_Renderer* renderer, float x, float y, float size) {
+        SDL_FRect r{ x, y, size, size };
+        SDL_RenderFillRect(renderer, &r);
+    }
+
+    void drawPattern(SDL_Renderer* renderer, const char* pattern[7],
+        float x, float y, float block, float gap) {
+        for (int row = 0; row < 7; ++row) {
+            for (int col = 0; col < 5; ++col) {
+                if (pattern[row][col] == '1') {
+                    drawBlock(renderer,
+                        x + col * (block + gap),
+                        y + row * (block + gap),
+                        block);
+                }
+            }
+        }
+    }
+
+    void drawLetterF(SDL_Renderer* renderer, float x, float y, float block, float gap) {
+        const char* F[7] = {
+            "11111",
+            "10000",
+            "10000",
+            "11110",
+            "10000",
+            "10000",
+            "10000"
+        };
+        drawPattern(renderer, F, x, y, block, gap);
+    }
+
+    void drawLetterI(SDL_Renderer* renderer, float x, float y, float block, float gap) {
+        const char* I[7] = {
+            "11111",
+            "00100",
+            "00100",
+            "00100",
+            "00100",
+            "00100",
+            "11111"
+        };
+        drawPattern(renderer, I, x, y, block, gap);
+    }
+
+    void drawLetterN(SDL_Renderer* renderer, float x, float y, float block, float gap) {
+        const char* N[7] = {
+            "10001",
+            "11001",
+            "10101",
+            "10011",
+            "10001",
+            "10001",
+            "10001"
+        };
+        drawPattern(renderer, N, x, y, block, gap);
+    }
+
+};
+static int recuerdosRecolectados();
+static bool poderAguaDesbloqueado();
+
+static bool esMonstruo(GameObject* obj) {
+    if (!obj) return false;
+
+    return obj->name == "EnemyHospital" ||
+        obj->name == "EnemyAdulthood" ||
+        obj->name == "BossShadow";
+}
+
+// ---------------------------------------------------------------------------
+// WaterAttack: hitbox temporal del poder de agua.
+// Solo existe unos frames. Si toca un enemigo, lo destruye.
+// ---------------------------------------------------------------------------
+class WaterAttack : public Component {
+public:
+    float seconds = 0.12f;
+
+    void update(float dt) override {
+        seconds -= dt;
+
+        if (seconds <= 0.0f) {
+            gameObject->scene->destroy(gameObject);
+        }
+    }
+
+    void onCollision(GameObject* other) override {
+        if (!esMonstruo(other)) return;
+
+        SDL_Log("PODER DE AGUA: monstruo eliminado -> %s", other->name.c_str());
+
+        if (g_monstruosVivos > 0) {
+            g_monstruosVivos--;
+        }
+
+        SDL_Log("Monstruos restantes: %d", g_monstruosVivos);
+
+        crearParticulas(
+            *gameObject->scene,
+            other->transform->x,
+            other->transform->y,
+            16,
+            80, 180, 255
+        );
+
+        gameObject->scene->destroy(other);
+        gameObject->scene->destroy(gameObject);
+    }
+};
+
+static void crearAtaqueAgua(Scene& scene, float x, float y) {
+    GameObject* agua = scene.createGameObject("WaterAttack");
+
+    // El disparo de agua es hacia abajo, debajo del gato.
+    agua->transform->x = x;
+    agua->transform->y = y + 44.0f;
+
+    auto col = agua->addComponent<BoxCollider>();
+    col->width = 96.0f;
+    col->height = 70.0f;
+    col->isTrigger = true;
+
+    agua->addComponent<WaterAttack>();
+
+    // Efecto visual simple
+    crearParticulas(scene, x, y + 44.0f, 14, 80, 180, 255);
+}
+
 class GatoController : public Component {
 public:
     // Movimiento horizontal (px/seg y px/seg^2)
@@ -220,7 +399,7 @@ public:
     float friction = 1700.0f;   // que tan rapido frena al soltar
 
     // Salto
-    float jumpSpeed = 310.0f;
+    float jumpSpeed = 400.0f;
     float jumpCut   = 0.45f;    // multiplicador al soltar Espacio subiendo
 
     // Dash de Lucidez
@@ -254,13 +433,31 @@ public:
     // collider del peligro/enemigo sigue solapado unos frames.
     void takeDamage() {
         if (controlsLocked || damageCooldown > 0.0f) return;
+
         hurt();
         damageCooldown = damageCooldownTime;
-        crearParticulas(*gameObject->scene, gameObject->transform->x, gameObject->transform->y, 6, 220, 60, 60); // rafaga roja al golpe
-        if (--lives <= 0) {
-            lives = maxLives;
-            gameOverPending = true; // el reset de posicion se hace en el proximo update() (ahi hay RigidBody2D a mano)
-            SDL_Log("GAME OVER: te quedaste sin vidas, reiniciando desde el spawn.");
+
+        crearParticulas(
+            *gameObject->scene,
+            gameObject->transform->x,
+            gameObject->transform->y,
+            6,
+            220, 60, 60
+        );
+
+        lives--;
+
+        if (lives <= 0) {
+			lives = 0;
+            controlsLocked = true;
+            gameOverPending = true;
+
+            SDL_Log("FIN: te quedaste sin vidas.");
+        }
+        else {
+            respawnPending = true;
+
+            SDL_Log("Pierdes una vida. Vidas restantes: %d. Respawn al inicio.", lives);
         }
     }
 
@@ -278,9 +475,24 @@ public:
         if (!rb) return;
 
         if (damageCooldown > 0.0f) damageCooldown -= dt;
+
         if (gameOverPending) {
+            rb->velocityX = 0.0f;
+            rb->velocityY = 0.0f;
+            rb->gravityScale = 0.0f;
+
+            if (!finScreenCreated) {
+                GameObject* fin = gameObject->scene->createGameObject("PantallaFin");
+                fin->addComponent<PantallaFin>();
+                finScreenCreated = true;
+			}
+
+            return;
+        }
+
+        if (respawnPending) {
             respawn(rb, gameObject->transform);
-            gameOverPending = false;
+            respawnPending = false;
         }
 
         if (controlsLocked) {
@@ -372,11 +584,18 @@ public:
 
         // --- salto (buffer + coyote) ---
         if (jumpBuffer > 0.0f && coyote > 0.0f) {
+            // Pequeño empujón hacia arriba para despegarlo del collider del suelo.
+            // Si no, la resolución de colisiones puede cancelar el salto en el mismo frame.
+            t->y -= 4.0f;
+
             rb->velocityY = -jumpSpeed;
+
             jumpBuffer = 0.0f;
-            coyote = 0.0f; // consumir la ventana: evita doble salto en el mismo apoyo
+            coyote = 0.0f;
             jumping = true;
-            jumpStartTimer = jumpStartDuration; // reproducir el impulso/despegue
+            jumpStartTimer = jumpStartDuration;
+
+            SDL_Log("JUMP ejecutado: vy = %.2f", rb->velocityY);
         }
         // Salto variable: soltar Espacio mientras sube corta el impulso. Solo
         // aplica a saltos propios (no al final de un dash ni al salto de agua).
@@ -391,8 +610,16 @@ public:
             rb->velocityY = -waterJump;
             canWaterJump = false;
             jumping = false;
-            waterShootTimer = waterShootDuration; // animacion de la pistola de agua
-            // TODO: spawnear el chorro de agua (sprite + Lifetime) y sonido.
+            waterShootTimer = waterShootDuration;
+
+            if (poderAguaDesbloqueado()) {
+                crearAtaqueAgua(*gameObject->scene, t->x, t->y);
+                SDL_Log("Poder de agua usado: puedes eliminar monstruos.");
+            }
+            else {
+                SDL_Log("El agua aun no puede eliminar monstruos. Recuerdos: %d/9",
+                    recuerdosRecolectados());
+            }
         }
 
         // --- sprite y animacion ---
@@ -438,13 +665,15 @@ private:
         canWaterJump = true;
         hurtTimer = landTimer = jumpStartTimer = waterShootTimer = 0.0f;
         wasOnGround = false;
-        damageCooldown = 0.0f;
+        damageCooldown = damageCooldownTime;
     }
 
     // dano/vidas
     float damageCooldown = 0.0f;
+    bool  respawnPending = false;
     bool  gameOverPending = false;
-    static constexpr float damageCooldownTime = 1.0f; // segundos de invulnerabilidad tras un golpe
+    bool  finScreenCreated = false;
+    static constexpr float damageCooldownTime = 1.0f;
 
     // estado del dash
     bool  dashing = false;
@@ -490,6 +719,13 @@ struct MemoriaState {
     int grupo[3] = { 0, 0, 0 };
 };
 static MemoriaState g_memoria;
+static int recuerdosRecolectados() {
+    return g_memoria.total;
+}
+
+static bool poderAguaDesbloqueado() {
+    return g_memoria.total >= 9;
+}
 
 // ---------------------------------------------------------------------------
 // MemoriaFragment: fragmento de recuerdo REAL (leido de la capa Objects del
@@ -531,7 +767,8 @@ public:
             SDL_Texture* tex = assets.loadTexture(path);
             if (tex) {
                 textures.push_back(tex);
-            } else {
+            }
+            else {
                 SDL_Log("CinematicaFinal: Error al cargar %s", path.c_str());
             }
         }
@@ -588,25 +825,39 @@ class ExitZone : public Component {
 public:
     void onCollision(GameObject* other) override {
         if (other->name != "Player" || reached) return;
+
+        bool tieneTodosLosRecuerdos = g_memoria.grupo[0] == 3 &&
+            g_memoria.grupo[1] == 3 &&
+            g_memoria.grupo[2] == 3;
+
+        bool matoTodosLosMonstruos = g_monstruosVivos <= 0;
+
+        if (!tieneTodosLosRecuerdos) {
+            SDL_Log("SALIDA BLOQUEADA: faltan recuerdos. Tienes %d/9.", g_memoria.total);
+            return;
+        }
+
+        if (!matoTodosLosMonstruos) {
+            SDL_Log("SALIDA BLOQUEADA: aun quedan %d monstruos.", g_monstruosVivos);
+            return;
+        }
+
         reached = true;
 
-        bool good = g_memoria.grupo[0] == 3 && g_memoria.grupo[1] == 3 && g_memoria.grupo[2] == 3;
-        if (good) SDL_Log("FINAL: llegaste con los 9 recuerdos recuperados.");
-        else      SDL_Log("FINAL: llegaste con %d/9 recuerdos.", g_memoria.total);
+        SDL_Log("FINAL: recuperaste el poder del agua y eliminaste a los monstruos.");
 
-        // Bloquear controles del jugador y anular su gravedad
         auto ctrl = other->getComponent<GatoController>();
         if (ctrl) {
             ctrl->controlsLocked = true;
         }
 
-        // Crear la cinematica final en la escena
         GameObject* cineObj = gameObject->scene->createGameObject("CinematicaFinal");
         auto cine = cineObj->addComponent<CinematicaFinal>();
         cine->playerObject = other;
     }
 private:
     bool reached = false;
+    bool warnedMissing = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -627,60 +878,135 @@ enum class EnemyBehavior { Patrol, FloatChase, Boss };
 class Enemy : public Component {
 public:
     EnemyBehavior behavior = EnemyBehavior::Patrol;
-    GameObject* target = nullptr; // el jugador; lo asigna buildFragmentoMemoria despues de crearlo
+    GameObject* target = nullptr;
 
     float speed = 70.0f;
-    float patrolRange = 150.0f; // Patrol: cuanto se aleja del spawn antes de dar vuelta
-    float chaseRange = 260.0f;  // FloatChase/Boss: distancia (en X) para empezar a perseguir
-    float floatAmplitude = 12.0f; // FloatChase en reposo: vaiven vertical suave
-    float hurtCooldown = 1.0f;    // no golpear todos los frames mientras se solapa con el jugador
+    float patrolRange = 150.0f;
+    float chaseRange = 260.0f;
+    float floatAmplitude = 12.0f;
+    float hurtCooldown = 1.0f;
 
     void awake() override {
         baseX = gameObject->transform->x;
         baseY = gameObject->transform->y;
+        collider = gameObject->getComponent<BoxCollider>();
     }
 
     void update(float dt) override {
         if (cooldown > 0.0f) cooldown -= dt;
+
         Transform* t = gameObject->transform;
         auto sprite = gameObject->getComponent<SpriteRenderer>();
         auto anim = gameObject->getComponent<SpriteAnimator>();
 
         if (behavior == EnemyBehavior::Patrol) {
-            t->x += dir * speed * dt;
+            float dx = dir * speed * dt;
+
+            if (!tryMove(dx, 0.0f)) {
+                dir *= -1.0f;
+            }
+
             if (t->x > baseX + patrolRange) dir = -1.0f;
             else if (t->x < baseX - patrolRange) dir = 1.0f;
+
             if (sprite) sprite->flipX = dir < 0.0f;
             return;
         }
 
-        // FloatChase y Boss: perseguir si el objetivo esta a menos de chaseRange en X.
         bool chasing = target && std::fabs(target->transform->x - t->x) < chaseRange;
+
         if (chasing) {
-            float dx = target->transform->x - t->x;
-            t->x += (dx > 0.0f ? 1.0f : -1.0f) * speed * dt;
-            if (sprite) sprite->flipX = dx < 0.0f;
-        } else if (behavior == EnemyBehavior::FloatChase) {
-            bobPhase += dt * 2.0f;
-            t->y = baseY + std::sin(bobPhase) * floatAmplitude;
+            float dxToPlayer = target->transform->x - t->x;
+            float moveDir = dxToPlayer > 0.0f ? 1.0f : -1.0f;
+            float dx = moveDir * speed * dt;
+
+            tryMove(dx, 0.0f);
+
+            if (sprite) sprite->flipX = dxToPlayer < 0.0f;
         }
-        if (anim && behavior == EnemyBehavior::FloatChase) anim->play(chasing ? "chase" : "float");
+        else if (behavior == EnemyBehavior::FloatChase) {
+            bobPhase += dt * 2.0f;
+
+            float newY = baseY + std::sin(bobPhase) * floatAmplitude;
+
+            if (!wouldHitSolid(t->x, newY)) {
+                t->y = newY;
+            }
+        }
+
+        if (anim && behavior == EnemyBehavior::FloatChase) {
+            anim->play(chasing ? "chase" : "float");
+        }
     }
 
     void onCollision(GameObject* other) override {
         if (other->name != "Player" || cooldown > 0.0f) return;
-        // takeDamage() (no hurt() directo): asi el contacto con un enemigo
-        // tambien resta una vida, igual que un Hazard, y respeta el mismo
-        // cooldown de invulnerabilidad del lado del jugador.
-        if (auto* ctrl = other->getComponent<GatoController>()) ctrl->takeDamage();
+
+        if (auto* ctrl = other->getComponent<GatoController>()) {
+            ctrl->takeDamage();
+        }
+
         cooldown = hurtCooldown;
     }
 
 private:
-    float baseX = 0.0f, baseY = 0.0f;
+    BoxCollider* collider = nullptr;
+
+    float baseX = 0.0f;
+    float baseY = 0.0f;
     float dir = 1.0f;
     float bobPhase = 0.0f;
     float cooldown = 0.0f;
+
+    bool tryMove(float dx, float dy) {
+        Transform* t = gameObject->transform;
+
+        float nextX = t->x + dx;
+        float nextY = t->y + dy;
+
+        if (wouldHitSolid(nextX, nextY)) {
+            return false;
+        }
+
+        t->x = nextX;
+        t->y = nextY;
+        return true;
+    }
+
+    bool wouldHitSolid(float nextX, float nextY) {
+        if (!collider) return false;
+
+        float enemyCenterX = nextX + collider->offsetX;
+        float enemyCenterY = nextY + collider->offsetY;
+        float enemyHalfW = collider->halfW();
+        float enemyHalfH = collider->halfH();
+
+        const auto& colliders = gameObject->scene->getColliders();
+
+        for (BoxCollider* other : colliders) {
+            if (!other || other == collider) continue;
+            if (!other->gameObject || !other->gameObject->alive) continue;
+
+            // Solo queremos chocar contra los bloques sólidos del mapa.
+            // No contra Player, fragmentos, hazards ni otros triggers.
+            if (other->gameObject->name != "TilemapCollider") continue;
+            if (other->isTrigger) continue;
+
+            float otherCenterX = other->centerX();
+            float otherCenterY = other->centerY();
+            float otherHalfW = other->halfW();
+            float otherHalfH = other->halfH();
+
+            bool overlapX = std::fabs(otherCenterX - enemyCenterX) < (otherHalfW + enemyHalfW);
+            bool overlapY = std::fabs(otherCenterY - enemyCenterY) < (otherHalfH + enemyHalfH);
+
+            if (overlapX && overlapY) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -863,15 +1189,9 @@ static constexpr float kSpawnX = 41.333333f + 32.0f;
 static constexpr float kSpawnY = 477.0f + 32.0f;
 
 void buildFragmentoMemoria(Scene& scene) {
-    // --- terreno: Nivel1.tmj real (hospital/recuerdos/final), escala 1:1 con sus
-    //     coordenadas de Tiled (mismo sistema que PlayerSpawn/enemigos/fragmentos
-    //     de la guia). Tolera que falten hospital_tiles_32x32_extras,
-    //     hospital_corners_32x32 o fondo.png: esos tiles/fondo simplemente no se
-    //     ven todavia, pero el resto del mapa (y su colision) carga igual.
-    //     IMPORTANTE: se crea ANTES que el Player. El render es en orden de
-    //     creacion (pintor), y el mapa real trae un Fondo que cubre TODA la
-    //     pantalla: si el jugador se creara despues, el fondo lo taparia
-    //     (con el nivel de prueba viejo, sin fondo opaco, no se notaba). ---
+    g_memoria = MemoriaState{};
+    g_monstruosVivos = 0;
+
     GameObject* tilemap = scene.createGameObject("Tilemap");
     auto tm = tilemap->addComponent<TilemapRenderer>();
     if (!tm->loadTiledMap("assets/Nivel1.tmj"))
@@ -894,22 +1214,38 @@ void buildFragmentoMemoria(Scene& scene) {
         float cy = obj.y + obj.height * 0.5f;
 
         if (obj.type == "player") {
-            spawnX = cx; spawnY = cy;
-        } else if (obj.type == "enemy" && obj.name.find("hospital") != std::string::npos) {
+            spawnX = cx;
+            spawnY = cy;
+
+        }
+        else if (obj.type == "enemy" && obj.name.find("hospital") != std::string::npos) {
             enemigos.push_back(crearEnemigoHospital(scene, cx, cy)->getComponent<Enemy>());
-        } else if (obj.type == "enemy") {
+            g_monstruosVivos++;
+
+        }
+        else if (obj.type == "enemy") {
             enemigos.push_back(crearEnemigoAdultez(scene, cx, cy)->getComponent<Enemy>());
-        } else if (obj.type == "boss_shadow") {
+            g_monstruosVivos++;
+
+        }
+        else if (obj.type == "boss_shadow") {
             enemigos.push_back(crearBoss(scene, cx, cy)->getComponent<Enemy>());
-        } else if (obj.type == "fragment1" || obj.type == "fragment") {
-            // "fragment" (sin numero) son los que la guia recomienda corregir en
-            // Tiled a fragment1; mientras tanto se cuentan como grupo 1 igual.
+            g_monstruosVivos++;
+
+        }
+        else if (obj.type == "fragment1" || obj.type == "fragment") {
             crearFragmentoReal(scene, cx, cy, 0, fragCount[0]++);
-        } else if (obj.type == "fragment2") {
+
+        }
+        else if (obj.type == "fragment2") {
             crearFragmentoReal(scene, cx, cy, 1, fragCount[1]++);
-        } else if (obj.type == "fragment3") {
+
+        }
+        else if (obj.type == "fragment3") {
             crearFragmentoReal(scene, cx, cy, 2, fragCount[2]++);
-        } else if (obj.type == "exit") {
+
+        }
+        else if (obj.type == "exit") {
             crearSalida(scene, cx, cy, obj.width, obj.height);
         }
         // cualquier otro type (o vacio) se ignora: getObjects() ya filtro los sin type.
