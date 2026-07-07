@@ -35,6 +35,7 @@ Lo que el motor ya hace hoy:
 - **Debugger conmutable**: dibujo de colliders, zona muerta y primitivas (se prende/apaga en
   caliente).
 - **`AssetManager`**: dueño de las texturas; los renderers solo las piden prestadas.
+- **Audio de fondo**: música en loop vía **SDL3_mixer**, inicializada en `main.cpp`.
 
 ---
 
@@ -77,15 +78,14 @@ sdl_upc_engine/
 │   ├── Debugger.*          #   ayudas visuales de depuración
 │   └── third_party/        #   librerías de terceros incluidas (vendored)
 │       └── nlohmann/json.hpp  # nlohmann/json single-include (MIT), para Tiled JSON
-├── game/                   # Lógica de los EJEMPLOS (lado del juego, no del motor)
-│   ├── Platformer.{h,cpp}  #   ejemplo 1
-│   ├── TopDown.{h,cpp}     #   ejemplo 2
-│   └── Shooter.{h,cpp}     #   ejemplo 3
-├── main.cpp                # Bucle de SDL + selector de ejemplos (teclas 1/2/3)
-├── assets/                 # Recursos junto al ejecutable (imágenes, mapas)
-│   ├── pixel_adventure/    #   sprites del pack Pixel Adventure (platformer)
-│   ├── ninja_adventure/    #   sprites y tileset del pack Ninja Adventure (top-down)
-│   └── maps/               #   niveles de Tiled (.json/.tmx) y mapa propio (.map)
+├── game/                   # Lógica del JUEGO (lado del juego, no del motor)
+│   ├── FragmentoMemoria.{h,cpp} #   el juego entregado: "Fragmento de Memoria"
+│   └── Platformer/TopDown/Shooter.{h,cpp} # ejemplos del curso (no se usan en main.cpp)
+├── main.cpp                # Bucle de SDL, inicializa audio y arranca Fragmento de Memoria
+├── assets/                 # Recursos junto al ejecutable (imágenes, mapas, audio)
+│   ├── pixel_adventure/    #   sprites del pack Pixel Adventure
+│   ├── Nivel1.tmj          #   nivel real (Tiled), cargado por FragmentoMemoria
+│   └── backgroud_sound.mp3 #   música de fondo (loop)
 └── sdl_upc_engine.vcxproj  # Proyecto de Visual Studio (un solo ejecutable)
 ```
 
@@ -104,13 +104,14 @@ ejecutable de consola). No hay solución `.sln` ni `CMakeLists.txt` en el repo: 
 
 - **Visual Studio 2026** con el toolset de C++ (PlatformToolset `v145`), C++17. (Si tu VS es
   2022, en el primer build te va a ofrecer "Retarget projects": aceptalo para pasar a `v143`.)
-- **SDL3**, **SDL3_image** y **nlohmann/json** **ya vienen vendorizadas en el repo**, en
-  `engine/third_party/` (`SDL3/`, `SDL3_image/` y `nlohmann/json.hpp`). **No hace falta instalar
-  nada ni configurar vcpkg**: al clonar el repo están listas y el `.vcxproj` ya apunta ahí con
-  rutas relativas (`$(ProjectDir)engine\third_party\...`), tanto para Debug como para Release.
-  Son los binarios oficiales de **[libsdl.org](https://www.libsdl.org/)** (paquete "VC", x64);
-  sus licencias están en `engine/third_party/SDL3/LICENSE.txt` y
-  `engine/third_party/SDL3_image/LICENSE.txt`.
+- **SDL3**, **SDL3_image**, **SDL3_mixer** y **nlohmann/json** **ya vienen vendorizadas en el
+  repo**, en `engine/third_party/` (`SDL3/`, `SDL3_image/`, `SDL3_mixer/` y `nlohmann/json.hpp`).
+  **No hace falta instalar nada ni configurar vcpkg**: al clonar el repo están listas y el
+  `.vcxproj` ya apunta ahí con rutas relativas (`$(ProjectDir)engine\third_party\...`), tanto
+  para Debug como para Release. Son los binarios oficiales de
+  **[libsdl.org](https://www.libsdl.org/)** (paquete "VC", x64); sus licencias están en
+  `engine/third_party/SDL3/LICENSE.txt`, `engine/third_party/SDL3_image/LICENSE.txt` y
+  `engine/third_party/SDL3_mixer/LICENSE.txt`.
 
 ### Pasos
 
@@ -119,26 +120,31 @@ ejecutable de consola). No hay solución `.sln` ni `CMakeLists.txt` en el repo: 
 3. Selecciona la configuración **x64** (Debug o Release; ambas ya tienen las rutas de SDL
    cableadas).
 4. Compila y ejecuta (F5). El evento post-build copia automáticamente `SDL3.dll`,
-   `SDL3_image.dll` y la carpeta `assets/` junto al ejecutable.
+   `SDL3_image.dll`, `SDL3_mixer.dll` y la carpeta `assets/` junto al ejecutable.
 
 ---
 
-## Controles y ejemplos
+## El juego: Fragmento de Memoria
 
-Hay **tres ejemplos** que se cambian en caliente con las teclas numéricas:
+`main.cpp` arranca directamente **Fragmento de Memoria** (`game/FragmentoMemoria.cpp`): un
+plataformas de precisión estilo Celeste. Un gato —el alma de un anciano con pérdida de
+memoria— recorre las etapas de su vida recolectando fragmentos de recuerdos sobre el nivel
+real armado en Tiled (`assets/Nivel1.tmj`). Apenas arranca la ventana suena en loop la música
+de fondo (`assets/backgroud_sound.mp3`, vía SDL3_mixer).
 
-| Tecla | Ejemplo |
-|-------|---------|
-| `1`   | Platformer (lateral con gravedad y salto; personaje de **Pixel Adventure** animado por estado) |
-| `2`   | Top-down (4 direcciones; personaje de **Ninja Adventure** con animación direccional y mundo desde Tiled) |
-| `3`   | Shooter (disparo) |
-| `F1`  | Prende/apaga el dibujo de debug (colliders, etc.) |
+Los ejemplos del curso (`game/Platformer.*`, `TopDown.*`, `Shooter.*`) siguen en el repo como
+referencia, pero `main.cpp` ya no los invoca.
 
-Controles dentro de cada ejemplo:
-
-- **Platformer (`1`)**: `←`/`→` mueven, `Espacio` salta.
-- **Top-down (`2`)**: `←`/`→`/`↑`/`↓` mueven en las 4 direcciones.
-- **Shooter (`3`)**: `←`/`→` mueven, `Espacio` dispara.
+| Tecla | Acción |
+|-------|--------|
+| `←` / `→` | Mover |
+| `↑` / `↓` | Apuntar (pistola de agua) |
+| `Espacio` | Saltar (soltar corta el salto; tiene coyote time + jump buffer) |
+| `X` / `Shift izq.` | Dash de Lucidez: impulso en 8 direcciones que revela temporalmente las plataformas ocultas |
+| `C` | Salto Propulsado (solo nivel 3): disparo de agua hacia abajo que actúa como doble salto |
+| `R` | Reiniciar el nivel |
+| `Enter` | Confirmar en pantallas de menú |
+| `F1` | Prende/apaga el dibujo de debug (colliders, etc.) |
 
 ---
 
@@ -212,7 +218,10 @@ Proyecto en **desarrollo activo**: el motor crece sesión a sesión a lo largo d
   colisiones en `Scene`.
 - Ciclo de vida: `destroy` diferido, `Lifetime`, `Spawner`.
 - `TilemapRenderer` (código / archivo propio / Tiled JSON) y `Debugger` conmutable.
-- Tres ejemplos: platformer, top-down y shooter (`1`/`2`/`3`).
+- Tres ejemplos del curso: platformer, top-down y shooter.
+- Audio de fondo en loop (SDL3_mixer).
+- Juego final: **Fragmento de Memoria**, con Dash de Lucidez, plataformas efímeras y
+  Salto Propulsado.
 
 **Pendiente (sin orden fijo):**
 
@@ -220,8 +229,9 @@ Proyecto en **desarrollo activo**: el motor crece sesión a sesión a lo largo d
 - Clase `Input` consultable (`isKeyDown` / `wasPressed`).
 - `TextRenderer` + UI básica (SDL3_ttf): HUD, puntaje, diálogos.
 - Sistema de tags o capas (reemplazar el filtro por `name`).
-- Audio (SDL3_mixer); mejoras de física (one-way platforms, broad-phase, fricción/rebote);
-  handles seguros; parenting de `Transform`; partículas.
+- Efectos de sonido puntuales (salto, dash, recolectar fragmento); mejoras de física
+  (one-way platforms, broad-phase, fricción/rebote); handles seguros; parenting de
+  `Transform`; partículas.
 
 **Limitaciones conocidas:** colisiones O(n²) (bien para decenas de objetos, no miles); la
 resolución por pares puede temblar con colliders apilados; no hay desregistro automático de
@@ -237,18 +247,22 @@ punteros a objetos destruidos.
   *JSON for Modern C++* usada para leer los mapas de Tiled. Licencia **MIT**. Se incluye
   **vendorizada** en el repo (`engine/third_party/nlohmann/json.hpp`, single-include), con su
   cabecera de licencia MIT intacta; no requiere instalación.
-- **[SDL3](https://www.libsdl.org/)** y **[SDL3_image](https://github.com/libsdl-org/SDL_image)**
-  de **libsdl.org** — binarios oficiales (paquete "VC", x64) **vendorizados** en el repo
-  (`engine/third_party/SDL3/` y `engine/third_party/SDL3_image/`), con sus licencias **zlib**
-  intactas; no requiere instalación manual.
+- **[SDL3](https://www.libsdl.org/)**, **[SDL3_image](https://github.com/libsdl-org/SDL_image)**
+  y **[SDL3_mixer](https://github.com/libsdl-org/SDL_mixer)** de **libsdl.org** — binarios
+  oficiales (paquete "VC", x64) **vendorizados** en el repo (`engine/third_party/SDL3/`,
+  `engine/third_party/SDL3_image/` y `engine/third_party/SDL3_mixer/`), con sus licencias
+  **zlib** intactas; no requiere instalación manual.
 
 ### Assets
 
 - **[Pixel Adventure](https://pixelfrog-assets.itch.io/pixel-adventure-1)** de **Pixel Frog**
-  (itch.io) — sprites del ejemplo *platformer*. Respeta su licencia si reutilizas o
-  redistribuyes los assets.
+  (itch.io) — sprites del ejemplo *platformer* y del juego final. Respeta su licencia si
+  reutilizas o redistribuyes los assets.
 - **[Ninja Adventure Asset Pack](https://pixel-boy.itch.io/ninja-adventure-asset-pack)** de
   **Pixel-boy y AAA** — sprites del ninja y tileset del ejemplo *top-down*. Publicado bajo
   **CC0** (dominio público; atribución no obligatoria pero apreciada).
+- **Música de fondo** (`assets/backgroud_sound.mp3`): tomada de
+  [este video de YouTube](https://www.youtube.com/watch?v=EaCUyNQWY2M) <!-- ponytail: verificar
+  licencia/derechos de uso antes de distribuir el juego fuera del curso -->.
 
 Se usan con fines educativos.
