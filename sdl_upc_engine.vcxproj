@@ -138,18 +138,19 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include;$(ProjectDir)engine\third_party\SDL3_mixer\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;$(ProjectDir)engine\third_party\SDL3_mixer\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;SDL3_mixer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y "$(ProjectDir)engine\third_party\SDL3\lib\x64\SDL3.dll" "$(OutDir)"
 xcopy /y "$(ProjectDir)engine\third_party\SDL3_image\lib\x64\SDL3_image.dll" "$(OutDir)"
+xcopy /y "$(ProjectDir)engine\third_party\SDL3_mixer\lib\x64\SDL3_mixer.dll" "$(OutDir)"
 xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -161,18 +162,19 @@ xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)engine\third_party;$(ProjectDir)engine\third_party\SDL3\include;$(ProjectDir)engine\third_party\SDL3_image\include;$(ProjectDir)engine\third_party\SDL3_mixer\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)engine\third_party\SDL3\lib\x64;$(ProjectDir)engine\third_party\SDL3_image\lib\x64;$(ProjectDir)engine\third_party\SDL3_mixer\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>SDL3.lib;SDL3_image.lib;SDL3_mixer.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y "$(ProjectDir)engine\third_party\SDL3\lib\x64\SDL3.dll" "$(OutDir)"
 xcopy /y "$(ProjectDir)engine\third_party\SDL3_image\lib\x64\SDL3_image.dll" "$(OutDir)"
+xcopy /y "$(ProjectDir)engine\third_party\SDL3_mixer\lib\x64\SDL3_mixer.dll" "$(OutDir)"
 xcopy /Y /E /I "$(ProjectDir)assets" "$(OutDir)assets"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
