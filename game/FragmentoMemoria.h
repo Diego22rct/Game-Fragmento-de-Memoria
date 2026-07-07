@@ -14,3 +14,4 @@ class Scene;
 //  - Salto Propulsado (C, solo nivel 3): disparo de agua hacia abajo en el
 //    aire que actua como doble salto.
 void buildFragmentoMemoria(Scene& scene);
+bool consumirReinicioFragmentoMemoria();
